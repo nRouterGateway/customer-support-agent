@@ -15,8 +15,9 @@ export function createResponseCache(options: ResponseCacheOptions = {}) {
       return entry.events.map(event => ({ ...event }));
     },
     set(key: string, events: AgentEvent[]): void {
-      if (events.some(event => event.type === 'error' || event.type === 'cost')) return;
-      entries.delete(key); entries.set(key, { expiresAt: Date.now() + ttlMs, events: events.map(event => ({ ...event })) });
+      if (events.some(event => event.type === 'error')) return;
+      const replayable = events.filter(event => event.type !== 'cost');
+      entries.delete(key); entries.set(key, { expiresAt: Date.now() + ttlMs, events: replayable.map(event => ({ ...event })) });
       while (entries.size > maxEntries) entries.delete(entries.keys().next().value as string);
     },
   };
