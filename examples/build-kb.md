@@ -13,3 +13,9 @@ npx support-agent build-kb --docs ./docs --seed-url https://example.com/help --o
 
 Rebuild whenever the docs change. The runnable example in `examples/quickstart/` builds its index
 on first start instead; delete its `kb.json` to rebuild.
+
+To reuse embeddings for unchanged content during a rebuild:
+
+```bash
+npx support-agent build-kb --docs ./docs --out kb.json --incremental
+```
