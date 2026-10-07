@@ -1,6 +1,7 @@
 // Public entry: "@nrouter_ai/support-agent". Edge-safe: no node: imports reachable from here.
 export * from './types.js';
 export { createSupportAgent } from './agent.js';
+export { createResponseCache, responseCacheKey } from './cache.js';
 export { SupportAgentError, toSafeError, redact } from './errors.js';
 export { buildKnowledgeIndex, DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './knowledge/build.js';
 export { createMemoryKnowledgeStore, cosineSimilarity } from './knowledge/store.js';

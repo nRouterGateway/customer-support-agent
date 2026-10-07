@@ -22,11 +22,12 @@ import { maskPii, maskMessageContent } from './pii.js';
 import { matchesBookingIntent } from './booking.js';
 import { buildSuggestions } from './suggestions.js';
 import { isSmallTalk } from './small-talk.js';
+import { responseCacheKey } from './cache.js';
 
 export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
   const cfg = resolveConfig(config);
 
-  async function* chat(req: unknown, ctx?: import('./types.js').TrustedContext): AsyncIterable<AgentEvent> {
+  async function* uncachedChat(req: unknown, ctx?: import('./types.js').TrustedContext): AsyncIterable<AgentEvent> {
     try {
       const validatedReq = validateChatRequest(req, cfg.limits);
       const validatedCtx = ctx ? validateTrustedContext(ctx) : {};
@@ -322,6 +323,16 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       }
       yield { type: 'done' };
     }
+  }
+
+  async function* chat(req: unknown, ctx?: import('./types.js').TrustedContext): AsyncIterable<AgentEvent> {
+    if (!cfg.responseCache) { yield* uncachedChat(req, ctx); return; }
+    const key = responseCacheKey(req, ctx);
+    const cached = cfg.responseCache.get(key);
+    if (cached) { yield* cached; return; }
+    const events: AgentEvent[] = [];
+    for await (const event of uncachedChat(req, ctx)) { events.push(event); yield event; }
+    cfg.responseCache.set(key, events);
   }
 
   function chatSSE(req: unknown, ctx?: import('./types.js').TrustedContext): ReadableStream<Uint8Array> {

@@ -2,6 +2,7 @@ import type { PayloadLimits, ConfidenceThresholds, ResolvedConfig, SupportAgentC
 import { SupportAgentError } from './errors.js';
 import { createClient } from './client.js';
 import { createMemoryKnowledgeStore } from './knowledge/store.js';
+import { createResponseCache } from './cache.js';
 
 export const DEFAULT_LIMITS: PayloadLimits = { maxMessages: 12, maxMessageChars: 2000, maxPageContextChars: 1000 };
 export const DEFAULT_CONFIDENCE: ConfidenceThresholds = { high: 0.55, medium: 0.4 };
@@ -183,6 +184,7 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
     maxToolSteps,
     webSearch,
     memoryStore: config.memoryStore ?? null,
+    responseCache: config.responseCache === false ? null : createResponseCache(config.responseCache),
     hooks: config.hooks ?? {},
     maskPii,
   };
