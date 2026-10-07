@@ -24,5 +24,9 @@ export function createResponseCache(options: ResponseCacheOptions = {}) {
 }
 
 export function responseCacheKey(req: unknown, ctx: unknown): string {
-  return JSON.stringify({ req, ctx });
+  const cleanReq = req && typeof req === 'object' ? { ...(req as Record<string, unknown>) } : req;
+  if (cleanReq && typeof cleanReq === 'object' && 'signal' in cleanReq) {
+    delete (cleanReq as Record<string, unknown>).signal;
+  }
+  return JSON.stringify({ req: cleanReq, ctx });
 }

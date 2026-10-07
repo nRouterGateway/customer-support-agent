@@ -1007,6 +1007,42 @@ describe('SupportAgent: model fallback, booking action and suggestions', () => {
 
     expect(events.map(e => e.type)).toEqual(['confidence', 'error', 'done']);
   });
+
+  describe('response cache in agent', () => {
+    it('serves repeated requests from cache without calling the model again and omits cost', async () => {
+      const { retrieve } = await import('../src/retrieval.js');
+      const { streamChat } = await import('../src/client.js');
+      vi.mocked(retrieve).mockResolvedValue(chunks);
+      const agent = createSupportAgent({ client: fakeClient, model: 'a', knowledge: fakeIndex });
+
+      const firstEvents = await collect(agent, user('What is pricing?'));
+      expect(streamChat).toHaveBeenCalledTimes(1);
+      expect(firstEvents.some(e => e.type === 'cost')).toBe(true);
+      expect(firstEvents.filter(e => e.type === 'token').map(e => (e as any).text)).toEqual(['ok']);
+
+      const secondEvents = await collect(agent, user('What is pricing?'));
+      // Model stream is not called a second time
+      expect(streamChat).toHaveBeenCalledTimes(1);
+      // Cost is omitted on cache hit
+      expect(secondEvents.some(e => e.type === 'cost')).toBe(false);
+      // Tokens and done are preserved
+      expect(secondEvents.filter(e => e.type === 'token').map(e => (e as any).text)).toEqual(['ok']);
+      expect(secondEvents.some(e => e.type === 'done')).toBe(true);
+    });
+
+    it('can be disabled with responseCache: false', async () => {
+      const { retrieve } = await import('../src/retrieval.js');
+      const { streamChat } = await import('../src/client.js');
+      vi.mocked(retrieve).mockResolvedValue(chunks);
+      const agent = createSupportAgent({ client: fakeClient, model: 'a', knowledge: fakeIndex, responseCache: false });
+
+      await collect(agent, user('What is pricing?'));
+      expect(streamChat).toHaveBeenCalledTimes(1);
+
+      await collect(agent, user('What is pricing?'));
+      expect(streamChat).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 

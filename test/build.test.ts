@@ -255,4 +255,140 @@ describe('buildKnowledgeIndex', () => {
     // When maskPii is false, input is not masked
     expect(capturedOpts.input).toEqual(['Contact me at test@example.com']);
   });
+
+  describe('incremental rebuilds', () => {
+    it('reuses embeddings from previousIndex for unchanged chunks without calling client', async () => {
+      const client = {
+        embeddings: {
+          create: vi.fn(),
+        },
+      } as any;
+
+      const previousIndex = {
+        version: 1 as const,
+        embeddingModel: 'text-embedding-3-small',
+        dimensions: 2,
+        createdAt: '2026-09-01T00:00:00Z',
+        chunks: [
+          { id: 'chunk-0', title: 'Old Title', url: 'http://example.com/0', content: 'Content 0', embedding: [0.1, 0.2] },
+          { id: 'chunk-1', title: 'Old Title 1', url: 'http://example.com/1', content: 'Content 1', embedding: [0.3, 0.4] },
+        ],
+      };
+
+      const docs = [
+        { title: 'New Title 0', url: 'http://example.com/0', content: 'Content 0' },
+        { title: 'New Title 1', url: 'http://example.com/1', content: 'Content 1' },
+      ];
+
+      const index = await buildKnowledgeIndex({
+        docs,
+        client,
+        previousIndex,
+        dimensions: 2,
+      });
+
+      expect(client.embeddings.create).not.toHaveBeenCalled();
+      expect(index.chunks).toHaveLength(2);
+      expect(index.chunks[0]).toEqual({
+        id: 'chunk-0',
+        title: 'New Title 0',
+        url: 'http://example.com/0',
+        content: 'Content 0',
+        audiences: undefined,
+        embedding: [0.1, 0.2],
+      });
+      expect(index.chunks[1]).toEqual({
+        id: 'chunk-1',
+        title: 'New Title 1',
+        url: 'http://example.com/1',
+        content: 'Content 1',
+        audiences: undefined,
+        embedding: [0.3, 0.4],
+      });
+    });
+
+    it('re-embeds only changed chunks and preserves original chunk order', async () => {
+      const client = {
+        embeddings: {
+          create: vi.fn().mockImplementation(async (opts) => ({
+            data: opts.input.map(() => ({ embedding: [0.9, 0.9] })),
+          })),
+        },
+      } as any;
+
+      const previousIndex = {
+        version: 1 as const,
+        embeddingModel: 'text-embedding-3-small',
+        dimensions: 2,
+        createdAt: '2026-09-01T00:00:00Z',
+        chunks: [
+          { id: 'chunk-0', title: 'Doc 0', url: 'http://example.com/0', content: 'Unchanged 0', embedding: [0.1, 0.1] },
+          { id: 'chunk-1', title: 'Doc 1', url: 'http://example.com/1', content: 'Old Content 1', embedding: [0.2, 0.2] },
+          { id: 'chunk-2', title: 'Doc 2', url: 'http://example.com/2', content: 'Unchanged 2', embedding: [0.3, 0.3] },
+        ],
+      };
+
+      const docs = [
+        { title: 'Doc 0', url: 'http://example.com/0', content: 'Unchanged 0' },
+        { title: 'Doc 1', url: 'http://example.com/1', content: 'NEW Content 1' },
+        { title: 'Doc 2', url: 'http://example.com/2', content: 'Unchanged 2' },
+      ];
+
+      const index = await buildKnowledgeIndex({
+        docs,
+        client,
+        previousIndex,
+        dimensions: 2,
+      });
+
+      // Only chunk-1 should be passed to embed
+      expect(client.embeddings.create).toHaveBeenCalledTimes(1);
+      expect(client.embeddings.create).toHaveBeenCalledWith(
+        expect.objectContaining({ input: ['NEW Content 1'] }),
+        expect.objectContaining({ signal: undefined })
+      );
+
+      // Order should remain Doc 0, Doc 1, Doc 2
+      expect(index.chunks).toHaveLength(3);
+      expect(index.chunks[0]?.id).toBe('chunk-0');
+      expect(index.chunks[0]?.embedding).toEqual([0.1, 0.1]);
+      expect(index.chunks[1]?.id).toBe('chunk-1');
+      expect(index.chunks[1]?.embedding).toEqual([0.9, 0.9]);
+      expect(index.chunks[2]?.id).toBe('chunk-2');
+      expect(index.chunks[2]?.embedding).toEqual([0.3, 0.3]);
+    });
+
+    it('ignores previousIndex if model or dimensions differ', async () => {
+      const client = {
+        embeddings: {
+          create: vi.fn().mockImplementation(async (opts) => ({
+            data: opts.input.map(() => ({ embedding: [0.5, 0.5, 0.5] })),
+          })),
+        },
+      } as any;
+
+      const previousIndex = {
+        version: 1 as const,
+        embeddingModel: 'text-embedding-3-small',
+        dimensions: 2,
+        createdAt: '2026-09-01T00:00:00Z',
+        chunks: [
+          { id: 'chunk-0', title: 'Doc 0', url: 'http://example.com/0', content: 'Content', embedding: [0.1, 0.1] },
+        ],
+      };
+
+      const docs = [{ title: 'Doc 0', url: 'http://example.com/0', content: 'Content' }];
+
+      // Requesting dimensions: 3 when previousIndex was dimensions: 2
+      const index = await buildKnowledgeIndex({
+        docs,
+        client,
+        previousIndex,
+        dimensions: 3,
+      });
+
+      expect(client.embeddings.create).toHaveBeenCalledTimes(1);
+      expect(index.chunks[0]?.embedding).toEqual([0.5, 0.5, 0.5]);
+    });
+  });
 });

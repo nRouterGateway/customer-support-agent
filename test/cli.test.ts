@@ -3,7 +3,14 @@ import { runCliWith } from '../src/cli.js';
 
 vi.mock('../src/node.js', () => ({
   readDocsDir: vi.fn().mockResolvedValue([]),
-  saveKnowledgeIndex: vi.fn().mockResolvedValue(undefined)
+  saveKnowledgeIndex: vi.fn().mockResolvedValue(undefined),
+  loadKnowledgeIndex: vi.fn().mockResolvedValue({
+    version: 1,
+    embeddingModel: 'test',
+    dimensions: 10,
+    createdAt: '2026-09-12T00:00:00Z',
+    chunks: []
+  })
 }));
 
 vi.mock('../src/knowledge/fetch.js', () => ({
@@ -118,5 +125,30 @@ describe('cli', () => {
       'Error: the gateway refused 1 document(s) under a guardrail: http://example.com/refused'
     );
     spyErr.mockRestore();
+  });
+
+  it('passes previousIndex when --incremental is specified and index file exists', async () => {
+    let capturedOpts: any;
+    const buildModule = await import('../src/knowledge/build.js');
+    (buildModule.buildKnowledgeIndex as any).mockImplementationOnce(async (opts: any) => {
+      capturedOpts = opts;
+      return {
+        version: 1,
+        embeddingModel: 'test',
+        dimensions: 10,
+        createdAt: '2026-09-12T00:00:00Z',
+        chunks: []
+      };
+    });
+
+    const code = await runCliWith(
+      ['build-kb', '--docs', 'dir', '--out', 'out.json', '--incremental'],
+      { NROUTER_API_KEY: 'sk-nrouter-fake' },
+      {}
+    );
+
+    expect(code).toBe(0);
+    expect(capturedOpts.previousIndex).toBeDefined();
+    expect(capturedOpts.previousIndex.embeddingModel).toBe('test');
   });
 });
