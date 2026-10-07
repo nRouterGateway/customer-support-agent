@@ -43,6 +43,8 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
   const maxBatchChars = opts.maxBatchChars || DEFAULT_EMBED_BATCH_CHARS;
   const maskPii = opts.maskPii;
   const skipBlocked = opts.skipBlocked ?? false;
+  const reusable = opts.previousIndex && opts.previousIndex.embeddingModel === embeddingModel && opts.previousIndex.dimensions === dimensions
+    ? new Map(opts.previousIndex.chunks.map(chunk => [chunk.id, chunk])) : new Map();
 
   if (opts.docs.length === 0) {
     const emptyIndex: KnowledgeIndex = {
@@ -87,13 +89,18 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
       continue;
     }
 
-    const input = batch.map(c => c.content);
+    const reused = batch.map(c => reusable.get(c.id)).filter((chunk): chunk is KnowledgeChunk => !!chunk && chunk.content === batch.find(candidate => candidate.id === chunk.id)?.content);
+    const reusedIds = new Set(reused.map(chunk => chunk.id));
+    for (const chunk of reused) chunks.push({ ...chunk });
+    const pending = batch.filter(c => !reusedIds.has(c.id));
+    if (pending.length === 0) continue;
+    const input = pending.map(c => c.content);
 
     let vectors: number[][];
     try {
       vectors = await embedRetry(opts.client, embeddingModel, input, dimensions, opts.signal, { maskPii, batchFallback: (opts as any).batchFallback });
-      for (let j = 0; j < batch.length; j++) {
-        const b = batch[j]!;
+      for (let j = 0; j < pending.length; j++) {
+        const b = pending[j]!;
         chunks.push({
           id: b.id,
           title: b.title,
@@ -116,7 +123,7 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
       const refusedInBatch = new Map<string, { title: string; url: string; reason: string }>();
       const successfulInBatch: Array<{ chunk: (typeof batch)[0]; vector: number[] }> = [];
 
-      for (const c of batch) {
+      for (const c of pending) {
         if (opts.signal?.aborted) {
           throw new SupportAgentError('aborted', 'build aborted');
         }

@@ -84,6 +84,8 @@ export interface BuildIndexOptions {
    */
   skipBlocked?: boolean;
   onSkip?(doc: { title: string; url: string; reason: string }): void;
+  /** Reuse vectors for unchanged chunks from a prior build. */
+  previousIndex?: KnowledgeIndex;
 }
 
 // ---------------------------------------------------------------------------
