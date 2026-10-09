@@ -30,13 +30,13 @@ const bookingUrl = env('BOOKING_URL');
 
 // 1. The knowledge index: built once from your docs, then reused from disk.
 async function loadOrBuildKnowledge() {
-  if (existsSync(kbPath)) return loadKnowledgeIndex(kbPath);
-  console.log(`Building the knowledge index from ${docsDir} ...`);
+  const previousIndex = existsSync(kbPath) ? await loadKnowledgeIndex(kbPath) : undefined;
+  console.log(`${previousIndex ? 'Refreshing' : 'Building'} the knowledge index from ${docsDir} ...`);
   const docs = await readDocsDir(docsDir, env('DOCS_BASE_URL') || undefined);
   if (docs.length === 0) throw new Error(`No .md, .mdx or .txt files found in ${docsDir}`);
-  const index = await buildKnowledgeIndex({ client: new nRouter({ apiKey, baseURL }), docs });
+  const index = await buildKnowledgeIndex({ client: new nRouter({ apiKey, baseURL }), docs, previousIndex });
   await saveKnowledgeIndex(kbPath, index);
-  console.log(`Indexed ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
+  console.log(`${previousIndex ? 'Refreshed' : 'Indexed'} ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
   return index;
 }
 
@@ -78,12 +78,24 @@ async function readJson(req) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    const origin = req.headers.origin;
+    if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(await readFile(page));
       return;
     }
-    if (req.method === 'POST' && req.url === '/api/chat') {
+    if (req.method === 'POST' && (req.url === '/api/chat' || req.url === '/api/public/ask')) {
       const body = await readJson(req);
       const ctx = {}; // e.g. { identity: { name, plan }, audiences: ['customers'], sessionId }
       const reader = agent.chatSSE({ messages: body.messages }, ctx).getReader();

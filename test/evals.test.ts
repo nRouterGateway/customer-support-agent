@@ -53,6 +53,12 @@ describe('Evals Suite', () => {
         } else if (q.includes('secret recipe for Coca-Cola')) {
           confidence = 'low';
           response = 'knowledge gap.';
+        } else if (q.includes('Hi, how are you')) {
+          confidence = 'low';
+          response = 'I am here to help with nRouter support.';
+        } else if (q.includes('What is football')) {
+          confidence = 'low';
+          response = 'I can help with nRouter support questions.';
         }
         
         yield { type: 'confidence', level: confidence, score: 0.9, webSearched: false } as AgentEvent;

@@ -103,6 +103,18 @@
       "category": "Off-topic",
       "question": "What is the secret recipe for Coca-Cola?",
       "expect": { "confidenceIn": ["low"] }
+    },
+    {
+      "id": "small-talk-greeting",
+      "category": "Small talk",
+      "question": "Hi, how are you?",
+      "expect": { "confidenceIn": ["low"], "containsAny": ["help", "support", "nrouter"] }
+    },
+    {
+      "id": "offtopic-football",
+      "category": "Off-topic",
+      "question": "What is football?",
+      "expect": { "confidenceIn": ["low"], "containsAny": ["support", "nrouter", "help"] }
     }
   ]
 }
