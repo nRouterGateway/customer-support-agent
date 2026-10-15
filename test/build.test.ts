@@ -239,6 +239,50 @@ describe('buildKnowledgeIndex', () => {
     expect(index.chunks[0]?.url).toBe('http://example.com/good');
   });
 
+  it("guardrail refusal with skipBlocked: 'chunk' drops only the refused chunk and keeps the rest of its doc", async () => {
+    const client = {
+      embeddings: {
+        create: vi.fn().mockImplementation(async (opts: any) => {
+          if (opts.input.length > 1 || opts.input[0].includes('Bad Section')) {
+            const err = new Error('request blocked by a guardrail: prompt injection detected');
+            (err as any).status = 400;
+            throw err;
+          }
+          return { data: [{ index: 0, embedding: [0.5, 0.5] }] };
+        })
+      }
+    } as any;
+
+    const docs = [
+      { title: 'Good Doc', url: 'http://example.com/good', content: 'Good Content' },
+      // The chunker is mocked to one chunk per entry: two entries on one url are two chunks of one document.
+      { title: 'Mixed Doc', url: 'http://example.com/mixed', content: 'Safe text.' },
+      { title: 'Mixed Doc', url: 'http://example.com/mixed', content: 'Bad Section quoted payload.' },
+    ];
+
+    const skipped: any[] = [];
+    const index = await buildKnowledgeIndex({
+      docs,
+      client,
+      dimensions: 2,
+      skipBlocked: 'chunk',
+      onSkip: (d) => skipped.push(d)
+    });
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]).toMatchObject({
+      title: 'Mixed Doc',
+      url: 'http://example.com/mixed',
+      reason: 'request blocked by a guardrail: prompt injection detected',
+    });
+    expect(typeof skipped[0].chunkId).toBe('string');
+    const urls = index.chunks.map(c => c.url);
+    expect(urls).toContain('http://example.com/good');
+    expect(urls).toContain('http://example.com/mixed');
+    expect(index.chunks.some(c => c.content.includes('Bad Section'))).toBe(false);
+    expect(index.chunks.some(c => c.content.includes('Safe text'))).toBe(true);
+  });
+
   it('passes maskPii option to embed calls', async () => {
     let capturedOpts: any;
     const client = {

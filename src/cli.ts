@@ -11,7 +11,7 @@ export interface CliDeps {
 
 export async function runCliWith(argv: string[], env: Record<string, string | undefined>, deps: CliDeps): Promise<number> {
   if (argv.length === 0 || argv[0] === 'help') {
-    console.log(`Usage: support-agent build-kb --docs <dir> [--seed-url <u>]... --out <file> [--model m] [--dimensions n] [--base-url u] [--base-docs-url u] [--incremental] [--skip-blocked] [--no-mask-pii]`);
+    console.log(`Usage: support-agent build-kb --docs <dir> [--seed-url <u>]... --out <file> [--model m] [--dimensions n] [--base-url u] [--base-docs-url u] [--incremental] [--skip-blocked | --skip-blocked-chunks] [--no-mask-pii]`);
     return argv[0] === 'help' ? 0 : 2;
   }
 
@@ -28,6 +28,7 @@ export async function runCliWith(argv: string[], env: Record<string, string | un
   let baseUrl: string | undefined;
   let baseDocsUrl: string | undefined;
   let skipBlocked = false;
+  let skipBlockedChunks = false;
   let maskPii = true;
   let incremental = false;
 
@@ -42,6 +43,7 @@ export async function runCliWith(argv: string[], env: Record<string, string | un
     else if (arg === '--base-docs-url') baseDocsUrl = argv[++i];
     else if (arg === '--incremental') incremental = true;
     else if (arg === '--skip-blocked') skipBlocked = true;
+    else if (arg === '--skip-blocked-chunks') skipBlockedChunks = true;
     else if (arg === '--no-mask-pii') maskPii = false;
     else {
       console.error(`Unknown option: ${arg}`);
@@ -49,6 +51,10 @@ export async function runCliWith(argv: string[], env: Record<string, string | un
     }
   }
 
+  if (skipBlocked && skipBlockedChunks) {
+    console.error('Use one of --skip-blocked or --skip-blocked-chunks, not both');
+    return 2;
+  }
   if (!docsDir) {
     console.error('Missing --docs');
     return 2;
@@ -80,10 +86,12 @@ export async function runCliWith(argv: string[], env: Record<string, string | un
       embeddingModel: model,
       dimensions,
       maskPii,
-      skipBlocked,
+      skipBlocked: skipBlockedChunks ? 'chunk' : skipBlocked,
       ...(previousIndex ? { previousIndex } : {}),
       onSkip(doc) {
-        console.log(redact(`skipped: ${doc.url} (${doc.reason})`));
+        console.log(redact(doc.chunkId
+          ? `skipped chunk ${doc.chunkId}: ${doc.url} (${doc.reason})`
+          : `skipped: ${doc.url} (${doc.reason})`));
       }
     });
 

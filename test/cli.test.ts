@@ -107,6 +107,39 @@ describe('cli', () => {
     spyLog.mockRestore();
   });
 
+  it("supports --skip-blocked-chunks: passes skipBlocked 'chunk' and logs each skipped chunk id", async () => {
+    const spyLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const buildModule = await import('../src/knowledge/build.js');
+    let capturedOpts: any = null;
+    (buildModule.buildKnowledgeIndex as any).mockImplementationOnce(async (opts: any) => {
+      capturedOpts = opts;
+      opts.onSkip?.({ title: 'Guardrails', url: 'http://example.com/guardrails', reason: 'prompt injection detected', chunkId: 'abc123' });
+      return { version: 1, embeddingModel: 'test', dimensions: 10, createdAt: '2026-10-15T00:00:00Z', chunks: [] };
+    });
+
+    const code = await runCliWith(
+      ['build-kb', '--docs', 'dir', '--out', 'out.json', '--skip-blocked-chunks'],
+      { NROUTER_API_KEY: 'sk-nrouter-fake' },
+      {}
+    );
+
+    expect(code).toBe(0);
+    expect(capturedOpts.skipBlocked).toBe('chunk');
+    expect(spyLog).toHaveBeenCalledWith('skipped chunk abc123: http://example.com/guardrails (prompt injection detected)');
+    spyLog.mockRestore();
+  });
+
+  it('refuses --skip-blocked together with --skip-blocked-chunks', async () => {
+    const spyErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const code = await runCliWith(
+      ['build-kb', '--docs', 'dir', '--out', 'out.json', '--skip-blocked', '--skip-blocked-chunks'],
+      { NROUTER_API_KEY: 'sk-nrouter-fake' },
+      {}
+    );
+    expect(code).toBe(2);
+    spyErr.mockRestore();
+  });
+
   it('names refused URLs in failure message when guardrail blocks', async () => {
     const spyErr = vi.spyOn(console, 'error').mockImplementation(() => {});
     const buildModule = await import('../src/knowledge/build.js');

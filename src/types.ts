@@ -103,11 +103,13 @@ export interface BuildIndexOptions {
   maskPii?: boolean;
   /**
    * When the gateway refuses a document's text under a guardrail: false (default)
-   * fails the build naming every refused document; true leaves them out and
-   * reports each through `onSkip`.
+   * fails the build naming every refused document; true leaves every chunk of a
+   * refused document out and reports each document through `onSkip`; 'chunk'
+   * leaves out only the refused chunks, keeps the rest of their document, and
+   * reports each refused chunk (with its `chunkId`) through `onSkip`.
    */
-  skipBlocked?: boolean;
-  onSkip?(doc: { title: string; url: string; reason: string }): void;
+  skipBlocked?: boolean | 'chunk';
+  onSkip?(doc: { title: string; url: string; reason: string; chunkId?: string }): void;
   /** Reuse vectors for unchanged chunks from a prior build. */
   previousIndex?: KnowledgeIndex;
 }

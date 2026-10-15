@@ -42,7 +42,8 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
   const batchSize = opts.batchSize || DEFAULT_EMBED_BATCH;
   const maxBatchChars = opts.maxBatchChars || DEFAULT_EMBED_BATCH_CHARS;
   const maskPii = opts.maskPii;
-  const skipBlocked = opts.skipBlocked ?? false;
+  const skipBlockedChunks = opts.skipBlocked === 'chunk';
+  const skipBlocked = opts.skipBlocked === true;
   const reusable = opts.previousIndex && opts.previousIndex.embeddingModel === embeddingModel && opts.previousIndex.dimensions === dimensions
     ? new Map(opts.previousIndex.chunks.map(chunk => [chunk.id, chunk])) : new Map();
 
@@ -121,6 +122,7 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
 
         // Re-embed that batch ONE chunk at a time to find the refused chunks
         const refusedInBatch = new Map<string, { title: string; url: string; reason: string }>();
+        const refusedChunks: Array<{ title: string; url: string; reason: string; chunkId: string }> = [];
         const successfulInBatch: Array<{ chunk: (typeof batch)[0]; vector: number[] }> = [];
 
         for (const c of pending) {
@@ -137,6 +139,7 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
             }
             const chunkSafe = toSafeError(chunkErr);
             if (chunkSafe.code === 'guardrail_blocked') {
+              refusedChunks.push({ title: c.title, url: c.url, reason: chunkSafe.message, chunkId: c.id });
               if (!refusedInBatch.has(c.url)) {
                 refusedInBatch.set(c.url, { title: c.title, url: c.url, reason: chunkSafe.message });
               }
@@ -151,25 +154,29 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
           throw error;
         }
 
-        if (!skipBlocked) {
+        if (skipBlockedChunks) {
+          // Only the refused chunks are absent from vectorMap, so the loop below
+          // keeps every other chunk of their documents.
+          for (const info of refusedChunks) opts.onSkip?.(info);
+        } else if (!skipBlocked) {
           const uniqueUrls = Array.from(refusedInBatch.keys());
           const listed = uniqueUrls.slice(0, 10).join(', ');
           throw new SupportAgentError(
             'guardrail_blocked',
             `the gateway refused ${uniqueUrls.length} document(s) under a guardrail: ${listed}`
           );
-        }
-
-        // skipBlocked is true: drop every chunk of a refused doc, call onSkip once per doc
-        for (const [url, info] of refusedInBatch) {
-          if (!skippedDocUrls.has(url)) {
-            skippedDocUrls.add(url);
-            opts.onSkip?.(info);
+        } else {
+          // skipBlocked is true: drop every chunk of a refused doc, call onSkip once per doc
+          for (const [url, info] of refusedInBatch) {
+            if (!skippedDocUrls.has(url)) {
+              skippedDocUrls.add(url);
+              opts.onSkip?.(info);
+            }
           }
-        }
 
-        // Drop every chunk of a refused doc from previously accumulated chunks
-        chunks = chunks.filter(c => !skippedDocUrls.has(c.url));
+          // Drop every chunk of a refused doc from previously accumulated chunks
+          chunks = chunks.filter(c => !skippedDocUrls.has(c.url));
+        }
       }
     }
 

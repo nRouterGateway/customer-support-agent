@@ -146,7 +146,7 @@ export async function POST(req: Request) {
 ```
 support-agent build-kb --docs <dir> [--seed-url <u>]... --out <file>
     [--model m] [--dimensions n] [--base-url u] [--base-docs-url u]
-    [--incremental] [--skip-blocked] [--no-mask-pii]
+    [--incremental] [--skip-blocked | --skip-blocked-chunks] [--no-mask-pii]
 ```
 
 `--incremental` reuses the vectors of unchanged chunks from the existing `--out` file, so only new or changed text is embedded again.
@@ -328,6 +328,7 @@ When a virtual key enforces a PII redact guardrail, the gateway refuses pre-call
 - **Knowledge Base Build Recovery:** During `build-kb`, if the gateway refuses an embeddings batch with `guardrail_blocked`:
   - **Refuse-and-Name (default):** Re-embeds one chunk at a time to identify the offending documents and throws `SupportAgentError('guardrail_blocked', 'the gateway refused N document(s) under a guardrail: <url1>, <url2>')`, naming up to 10 unique document URLs.
   - **Skip Blocked (`--skip-blocked`):** Drops all chunks belonging to refused documents, invokes `onSkip({ title, url, reason })` once per skipped document, and builds the index from the remaining documents.
+  - **Skip Blocked Chunks (`--skip-blocked-chunks`, `skipBlocked: 'chunk'`):** Drops only the refused chunks, keeps the rest of their documents, and invokes `onSkip({ title, url, reason, chunkId })` once per skipped chunk. Use it for docs that legitimately quote attack examples, such as a guardrails guide.
 - **Disabling Masking:** Set `maskPii: false` in config or pass `--no-mask-pii` to the `build-kb` CLI if pre-call masking is not desired.
 
 ## Knowledge per Organisation
