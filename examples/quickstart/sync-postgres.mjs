@@ -18,6 +18,7 @@ const databaseUrl = env('DATABASE_URL');
 const tenantId = env('TENANT_ID');
 const docsDir = env('DOCS_DIR') || 'examples/quickstart/docs';
 const kbPath = env('KB_PATH') || 'kb.json';
+const skipBlockedDocs = env('DOCS_SKIP_BLOCKED') === 'true';
 if (!apiKey || !databaseUrl || !tenantId) {
   throw new Error('Set NROUTER_API_KEY, DATABASE_URL, and TENANT_ID before indexing.');
 }
@@ -33,10 +34,15 @@ try {
     embeddingModel: env('EMBEDDING_MODEL') || DEFAULT_EMBEDDING_MODEL,
     dimensions: Number(env('EMBEDDING_DIMENSIONS') || DEFAULT_EMBEDDING_DIMENSIONS),
     ...(previousIndex ? { previousIndex } : {}),
+    skipBlocked: skipBlockedDocs,
+    onSkip: (doc) => console.warn(`[docs:skipped] ${doc.url} (${doc.reason})`),
   });
+  if (index.chunks.length === 0) {
+    throw new Error('No document chunks were indexed; refusing to replace the active knowledge index.');
+  }
   await saveKnowledgeIndex(kbPath, index);
   const result = await syncPostgresKnowledgeIndex(pool, tenantId, index);
-  console.log(`Published ${result.chunkCount} chunks for tenant ${tenantId} (${result.generationId}).`);
+  console.log(`Published ${result.chunkCount} chunks to the knowledge store.`);
 } finally {
   await pool.end();
 }

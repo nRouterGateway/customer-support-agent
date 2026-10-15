@@ -165,6 +165,29 @@ for the selected tenant. Publication uses a transaction and swaps the active gen
 failed ingestion leaves the previous index available. Deleted documents disappear on the next
 successful full sync. Set `NROUTER_API_KEY`, `DATABASE_URL`, and `TENANT_ID` for the job.
 
+### Automatic nRouter dashboard-doc ingestion
+
+The support-agent repository includes a manual ingestion workflow at
+`.github/workflows/ingest-dashboard-docs.yml`. Add the workflow
+`.github/workflows/dispatch-support-agent-doc-ingest.yml` from the frontend repository to dispatch it
+when docs under `resources/web/content/docs/` change on `main`. Configure these GitHub Actions
+secrets:
+
+- In `Diptesh2006/customer-support-agent`: `NROUTER_API_KEY`, `DATABASE_URL`, and `TENANT_ID`.
+- Also in `Diptesh2006/customer-support-agent`: `FRONTEND_DOCS_READ_TOKEN`, a fine-grained token
+  with Contents read access to the private `nRouterGateway/nrouter-frontend-ui` repository.
+- In `nRouterGateway/nrouter-frontend-ui`: `SUPPORT_AGENT_DISPATCH_TOKEN`, a fine-grained token with
+  Actions write access to `Diptesh2006/customer-support-agent`.
+
+Apply `migrations/001_support_agent_pgvector.sql` to the target database once before enabling the
+workflow. The ingestion job checks out the exact frontend commit that triggered it, restores the
+previous public-doc embedding index from the Actions cache, incrementally re-embeds changed chunks,
+and publishes the complete tenant index transactionally. It logs and skips only docs rejected by
+the gateway's embedding guardrails; review those logged URLs if the docs corpus changes materially.
+The workflow never logs the tenant ID or database URL. The deployed agent must use the same database
+and tenant ID through `createPostgresKnowledgeStore`; this workflow publishes the index but does not
+deploy or reconfigure the agent service. A manual dispatch can also re-sync a chosen frontend commit.
+
 At runtime, construct the store using the same embedding model and dimensions, then pass the
 organization ID from the backend's verified login session as `TrustedContext.tenantId`:
 
@@ -283,6 +306,16 @@ It may return a plain list of sources, or `{ sources, cost }` and set `reportsCo
 what each search costs.
 
 ## Usage
+
+### FAQ cache first, RAG for the long tail
+
+The agent checks a small, reviewed cache of common nRouter questions before it
+retrieves documents or calls a model. A recognized FAQ returns its documented
+answer and citation directly, with no embedding, retrieval, or generation call.
+Questions that do not confidently match one of the FAQ intents continue through
+the configured knowledge strategy—RAG over the full nRouter documentation corpus
+by default. Keep FAQ answers aligned with their linked docs; do not add account-
+specific facts to this shared cache.
 
 ### `chat(req, ctx)`
 Returns an `AsyncIterable<AgentEvent>` for custom handling. `req` is the untrusted input (e.g., the JSON request body containing messages). `ctx` is the `TrustedContext` supplied by the host's authentication, containing user identity and audiences.

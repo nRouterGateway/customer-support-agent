@@ -116,7 +116,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && (req.url === '/api/chat' || req.url === '/api/public/ask')) {
       const body = await readJson(req);
       const ctx = {}; // e.g. { identity: { name, plan }, audiences: ['customers'], sessionId }
-      const reader = agent.chatSSE({ messages: body.messages }, ctx).getReader();
+      const reader = agent.chatSSE({
+        messages: body.messages,
+        ...(typeof body.pageContext === 'string' ? { pageContext: body.pageContext } : {}),
+      }, ctx).getReader();
       req.on('close', () => { reader.cancel().catch(() => {}); });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform' });
       for (;;) {

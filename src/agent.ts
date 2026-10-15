@@ -40,7 +40,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
         for (const event of curated) yield event;
         if (cfg.hooks.onTurnMetrics) callHook(cfg.hooks, 'onTurnMetrics', {
           strategy: cfg.knowledgeStrategy,
-          cacheHit: false,
+          cacheHit: true,
           knowledgeMs: 0,
           answerMs: 0,
           totalMs: Date.now() - requestStartedAt,

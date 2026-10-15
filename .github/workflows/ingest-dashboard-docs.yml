@@ -1,0 +1,78 @@
+name: ingest-dashboard-docs
+
+on:
+  workflow_dispatch:
+    inputs:
+      docs_ref:
+        description: Frontend repository commit SHA to index
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-docs-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Verify the private docs token is configured
+        env:
+          FRONTEND_DOCS_READ_TOKEN: ${{ secrets.FRONTEND_DOCS_READ_TOKEN }}
+        run: |
+          if [ -z "$FRONTEND_DOCS_READ_TOKEN" ]; then
+            echo "::error::Configure FRONTEND_DOCS_READ_TOKEN with Contents: read access to nRouterGateway/nrouter-frontend-ui."
+            exit 1
+          fi
+
+      - name: Check out the support agent
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate the frontend commit SHA
+        env:
+          DOCS_REF: ${{ inputs.docs_ref }}
+        run: |
+          if ! [[ "$DOCS_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::docs_ref must be a 40-character frontend commit SHA."
+            exit 1
+          fi
+
+      - name: Check out the frontend documentation at the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: nRouterGateway/nrouter-frontend-ui
+          ref: ${{ inputs.docs_ref }}
+          path: frontend-docs
+          token: ${{ secrets.FRONTEND_DOCS_READ_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Restore the prior embedding index
+        uses: actions/cache@v4
+        with:
+          path: kb.json
+          key: ${{ runner.os }}-support-agent-kb-${{ inputs.docs_ref }}
+          restore-keys: |
+            ${{ runner.os }}-support-agent-kb-
+
+      - name: Install dependencies and build the agent
+        run: npm ci && npm run build
+
+      - name: Re-index docs and atomically publish to PostgreSQL
+        env:
+          NROUTER_API_KEY: ${{ secrets.NROUTER_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          DOCS_DIR: ${{ github.workspace }}/frontend-docs/resources/web/content/docs
+          DOCS_BASE_URL: https://nrouter.ai/docs
+          DOCS_SKIP_BLOCKED: 'true'
+          KB_PATH: kb.json
+        run: node examples/quickstart/sync-postgres.mjs

@@ -99,6 +99,29 @@ describe('SupportAgent', () => {
     }));
   });
 
+  it('answers cached FAQs before retrieval or a model call', async () => {
+    const { latestQuestion } = await import('../src/gaps.js');
+    const { retrieve } = await import('../src/retrieval.js');
+    const { callHook } = await import('../src/hooks.js');
+    vi.mocked(latestQuestion).mockReturnValueOnce('How does the platform fee work?');
+    const metrics = vi.fn();
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      hooks: { onTurnMetrics: metrics },
+      responseCache: false,
+    });
+
+    const events = [];
+    for await (const event of agent.chat({ messages: [{ role: 'user', content: 'platform fee?' }] })) events.push(event);
+
+    expect(events.map((event) => event.type)).toEqual(['confidence', 'citations', 'token', 'done']);
+    expect(vi.mocked(retrieve)).not.toHaveBeenCalled();
+    expect(fakeClient.nr.stream).not.toHaveBeenCalled();
+    expect(callHook).toHaveBeenCalledWith(expect.objectContaining({ onTurnMetrics: metrics }), 'onTurnMetrics', expect.objectContaining({ cacheHit: true, knowledgeMs: 0, answerMs: 0 }));
+  });
+
   it('loads signed-in account data for each turn and includes it with retrieved knowledge', async () => {
     const { buildSystemPrompt } = await import('../src/prompt.js');
     const load = vi.fn().mockResolvedValue('Plan: Team');
