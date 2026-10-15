@@ -22,7 +22,7 @@ export function curatedAnswer(question: string): AgentEvent[] | undefined {
     },
     {
       type: 'token',
-      text: 'Open the [nRouter dashboard](https://app.nrouter.ai) and go to your organization’s **Guardrails** page. Custom guardrails call your webhook. Owners and admins can create and manage guardrails; to assign one to a virtual key, go to **Guardrails → Keys**. Expand a guardrail and open **Test** to try sample input before using it. The public guide does not specify the Custom creation form or webhook request/response details, so I can’t give verified field-by-field setup instructions. See the [Guardrails guide](https://nrouter.ai/docs/guides/guardrails).',
+      text: 'Open the [nRouter dashboard](https://app.nrouter.ai) and go to your organization’s **Guardrails** page. Custom guardrails call your webhook. Owners and org admins can create and manage guardrails; to assign one to a virtual key, go to **Guardrails → Keys**. Expand a guardrail and open **Test** to try sample input before using it. The public guide does not specify the Custom creation form or webhook request/response details, so I can’t give verified field-by-field setup instructions. See the [Guardrails guide](https://nrouter.ai/docs/guides/guardrails).',
     },
     { type: 'done' },
   ];

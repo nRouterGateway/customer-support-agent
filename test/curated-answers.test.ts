@@ -13,6 +13,9 @@ describe('curated dashboard answers', () => {
     expect(answer.text).toContain('does not specify the Custom creation form');
     expect(answer.text).not.toContain('Create guardrail');
     expect(answer.text).not.toContain('webhook timeout');
+    // The organization role is "org admin"; a bare "admin" names no role a customer has.
+    expect(answer.text).toContain('Owners and org admins');
+    expect(answer.text).not.toMatch(/\b(?<!org )admins?\b/i);
   });
 
   it('does not intercept unrelated or non-procedural questions', () => {
