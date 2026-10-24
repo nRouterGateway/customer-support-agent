@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-The npm package `@nrouter_ai/support-agent`: a streaming customer-support agent library. It takes
-an nRouter API key, a model and a knowledge index, and returns a stream of events. Retrieval is an
-in-memory cosine search over a JSON index built by `support-agent build-kb`; there is no database.
+The in-process npm package `@nrouter_ai/support-agent` (**Rule #19**): a streaming customer-support agent library. It takes
+an nRouter API key, a model and a static JSON knowledge index, and returns a stream of events. Retrieval is an
+in-memory cosine search over the static JSON index built by `support-agent build-kb`; there is **zero database dependency** (no `pgvector`, no SQL migrations, no ORM, no database connection strings).
 
 ## Layout
 
@@ -88,6 +88,7 @@ when you touch that area. If you read nothing else, read the first one.
 - `~/nr/nrouter-brain/nrouter-cortex/rules/00-cortex-rules.md`
 - `~/nr/nrouter-brain/nrouter-frontend-ui/rules/40-image-blog-standards.md`
 - `~/nr/nrouter-brain/nrouter-frontend-ui/rules/41-seo-geo-aeo-page-checklist.md`
+- `~/nr/nrouter-brain/nrouter-frontend-ui/rules/42-homepage-design.md`
 - `~/nr/nrouter-brain/nrouter-infra-cicd/rules/08-database.md`
 - `~/nr/nrouter-brain/nrouter-infra-cicd/rules/15-startup-health.md`
 - `~/nr/nrouter-brain/nrouter-infra-cicd/rules/16-infrastructure.md`
