@@ -143,7 +143,7 @@ export function classifyLocal(text: string): JevClassificationResult {
   }
 
   // Quota & Fallback
-  if (q.includes('quota') || q.includes('429') || q.includes('fallback') || q.includes('rate limit') || q.includes('tpm') || q.includes('rpm')) {
+  if (q.includes('quota') || q.includes('429') || q.includes('fallback') || q.includes('rate limit') || /(\b|\d)(rps|rpd|rpm|tpm)s?\b/.test(q)) {
     return {
       category: 'quota_fallback',
       confidence: 0.91,

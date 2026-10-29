@@ -20,7 +20,7 @@ Virtual keys allow organizations to safely distribute access to developers, appl
 - **Key Format:** Every key carries the prefix `sk-nrouter-...`.
 - **Spend Ceilings:** Configure a hard spend limit in USD (e.g. $10, $50, $250). When the ceiling is reached, subsequent requests are refused with HTTP 402 without incurring overage.
 - **Model Restrictions:** Restrict a virtual key to specific allowed models (e.g. allow only `gemini-3.8-flash` or `claude-haiku-4-5`, while blocking expensive models).
-- **Rate Limits:** Enforce per-key request-per-minute (RPM) and tokens-per-minute (TPM) ceilings.
+- **Rate Limits:** Enforce per-key and per-org requests-per-minute (RPM) and tokens-per-minute (TPM) ceilings, plus per-key requests per second (RPS) and requests per day (RPD) set by the plan.
 - **CIDR & IP Allowlist:** Restrict key usage to specific corporate IP addresses or CIDR blocks.
 - **Fallback Chains:** Pinned secondary models ensure seamless fallback when upstream providers return 429 quota exhaustion.
 
@@ -40,7 +40,7 @@ The trace canvas provides high-precision debugging for every request:
   1. Edge WAF: Pre-auth size, method, and URI validation.
   2. Gate 0: Platform and tenant emergency safety hold evaluation.
   3. Phase 1: In-memory model access ACLs and virtual key validation.
-  4. Phase 2: RPM and TPM rate limit token bucket consumption.
+  4. Phase 2: RPM, TPM, RPS, and RPD rate limit token bucket consumption.
   5. Phase 3: Cortex moderation and prompt injection classification over mTLS.
   6. Phase 4: Two-tier credit reservation and plan allowance hold.
   7. Phase 5: Upstream provider execution, streaming response, and spend settlement.

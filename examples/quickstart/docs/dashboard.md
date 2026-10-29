@@ -22,7 +22,7 @@ Resources belong to an organization workspace. Common areas include:
 
 ## API keys
 
-Create and manage virtual API keys from the dashboard. Give each key only the access and spend limit it needs. Keys may have model restrictions, RPM/TPM rate limits, CIDR/IP allowlists, and fallback settings. The full secret is shown once when a key is created, so store it securely. If a key is lost or exposed, revoke it immediately and create a replacement. Never paste a full key into chat, email, logs, or support tickets.
+Create and manage virtual API keys from the dashboard. Give each key only the access and spend limit it needs. Keys may have model restrictions, rate limits (per-key and per-org requests per minute (RPM), tokens per minute (TPM), plus per-key requests per second (RPS) and requests per day (RPD) set by the plan), CIDR/IP allowlists, and fallback settings. The full secret is shown once when a key is created, so store it securely. If a key is lost or exposed, revoke it immediately and create a replacement. Never paste a full key into chat, email, logs, or support tickets.
 
 To create one: sign in at [app.nrouter.ai](https://app.nrouter.ai), open your organization, go to [Virtual keys](https://app.nrouter.ai/[org]/keys), select **Create key**, choose the required models and limits, and copy the secret when it is shown. Use it as `Authorization: Bearer sk-nrouter-...` from your server. If **Create key** is not visible, ask a workspace owner or contact nRouter support.
 

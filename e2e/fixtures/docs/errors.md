@@ -15,4 +15,4 @@ Returned when an API key is missing, expired, revoked, or invalid. Verify that y
 Returned when your organization credit balance has dropped to zero. API requests are halted until credits are replenished via **Billing → Add Credits** or through auto-recharge.
 
 ### 429 Too Many Requests (Rate Limited)
-Returned when your request volume exceeds the organization throughput ceiling (requests per minute or tokens per minute). Review the `Retry-After` header and implement exponential backoff before retrying.
+Returned when your request volume exceeds a throughput ceiling: per-key and per-org requests per minute (RPM), tokens per minute (TPM), plus per-key requests per second (RPS) and requests per day (RPD) set by the plan. Review the `Retry-After` header and implement exponential backoff before retrying.
