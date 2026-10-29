@@ -30,13 +30,32 @@ export async function runToolPhase(
     execute: async (args, call) => {
       ranTools = true;
       const title = tool.definition.function.name;
-      emit({ tool: call.function.name, title, status: 'running' });
+      const toolName = call?.function?.name || title;
+      emit({ tool: toolName, title, status: 'running' });
       try {
         const result = await tool.execute(args, call);
-        emit({ tool: call.function.name, title, status: 'done' });
+        if (
+          result &&
+          typeof result === 'object' &&
+          'status' in result &&
+          (result as { status?: string }).status === 'error'
+        ) {
+          emit({ tool: toolName, title, status: 'error' });
+          // Keep the tool's own payload (code, details, data); only normalize the error text.
+          const failed = result as { error?: string; message?: string } & Record<string, unknown>;
+          const errorText = failed.error || failed.message || 'Tool execution failed';
+          return {
+            ...failed,
+            toolName,
+            status: 'error',
+            error: errorText,
+            message: failed.message || errorText,
+          };
+        }
+        emit({ tool: toolName, title, status: 'done' });
         return result;
       } catch (err) {
-        emit({ tool: call.function.name, title, status: 'error' });
+        emit({ tool: toolName, title, status: 'error' });
         throw err;
       }
     }

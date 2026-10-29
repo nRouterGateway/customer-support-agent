@@ -77,6 +77,48 @@ describe('runToolPhase', () => {
     expect(emit).toHaveBeenCalledWith({ tool: 'bad_tool', title: 'bad_tool', status: 'error' });
   });
 
+  it('reports a tool that returns an error result as an error, not done', async () => {
+    const fakeClient = { nr: { request: vi.fn() } } as any;
+    let calls = 0;
+    fakeClient.nr.request.mockImplementation(async () => {
+      calls++;
+      const message = calls === 1
+        ? { role: 'assistant', tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'soft_fail', arguments: '{}' } }] }
+        : { role: 'assistant', content: 'done' };
+      return {
+        status: 200,
+        headers: { get: () => null },
+        text: JSON.stringify({ choices: [{ message }] }),
+        contentType: 'application/json',
+      };
+    });
+
+    const tool: AgentTool = {
+      definition: { type: 'function', function: { name: 'soft_fail' } },
+      execute: vi.fn().mockResolvedValue({
+        status: 'error',
+        message: 'upstream refused',
+        code: 'E_UPSTREAM',
+        details: { retryable: false },
+      }),
+    };
+    const cfg = { client: fakeClient, models: ['test-model'], tools: [tool], maxToolSteps: 2 } as any;
+    const emit = vi.fn();
+
+    await runToolPhase(cfg, [{ role: 'user', content: 'hi' }], emit);
+
+    expect(emit).toHaveBeenCalledWith({ tool: 'soft_fail', title: 'soft_fail', status: 'running' });
+    expect(emit).toHaveBeenCalledWith({ tool: 'soft_fail', title: 'soft_fail', status: 'error' });
+    expect(emit).not.toHaveBeenCalledWith({ tool: 'soft_fail', title: 'soft_fail', status: 'done' });
+    // The model sees a normalized error result naming the tool.
+    const secondCall = JSON.stringify(fakeClient.nr.request.mock.calls[1]);
+    expect(secondCall).toContain('upstream refused');
+    expect(secondCall).toContain('toolName');
+    // The tool's own payload fields survive normalization.
+    expect(secondCall).toContain('E_UPSTREAM');
+    expect(secondCall).toContain('retryable');
+  });
+
   it('honors maxToolSteps', async () => {
     const fakeClient = { nr: { request: vi.fn() } } as any;
     // Always returns a tool call

@@ -6,7 +6,7 @@ export interface McpClientConfig {
     mcpServers: Record<string, {
       command: string;
       args: string[];
-      env: Record<string, string>;
+      env?: Record<string, string>;
     }>;
   };
   cursor: {
@@ -32,9 +32,17 @@ export function formatMcpClientConfig(
       mcpServers: {
         [cleanServer]: {
           command: 'npx',
-          args: ['-y', '@modelcontextprotocol/server-fetch', endpoint],
+          args: [
+            '-y',
+            'mcp-remote',
+            endpoint,
+            '--header',
+            // mcp-remote expands ${AUTH_HEADER} from env itself, so the key never
+            // appears in the process arguments (readable from the process list).
+            'Authorization:${AUTH_HEADER}',
+          ],
           env: {
-            NROUTER_API_KEY: apiKey,
+            AUTH_HEADER: `Bearer ${apiKey}`,
           },
         },
       },
@@ -87,6 +95,7 @@ export function createMcpTools(client: nRouter): AgentTool[] {
       } catch (err: any) {
         return {
           status: 'error',
+          error: err?.message || 'Failed to list MCP tools from nRouter gateway',
           message: err?.message || 'Failed to list MCP tools from nRouter gateway',
         };
       }
@@ -119,9 +128,28 @@ export function createMcpTools(client: nRouter): AgentTool[] {
         },
       },
     },
-    execute: async (args: { serverId?: string; toolName: string; arguments?: Record<string, unknown> }) => {
+    execute: async (args: { serverId?: string; toolName: string; arguments?: Record<string, unknown> | string }) => {
       try {
-        const result = await mcp.call(args.serverId, args.toolName, args.arguments);
+        const invalidArgs = {
+          status: 'error',
+          error: 'Invalid JSON in tool arguments',
+          message: 'Invalid JSON in tool arguments',
+        };
+        const rawArgs = args.arguments;
+        let candidate: unknown = rawArgs ?? {};
+        if (typeof rawArgs === 'string') {
+          try {
+            candidate = JSON.parse(rawArgs);
+          } catch {
+            return invalidArgs;
+          }
+        }
+        // Only a plain object is a valid argument map: a primitive, array or null is refused.
+        if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+          return invalidArgs;
+        }
+        const parsedArgs = candidate as Record<string, unknown>;
+        const result = await mcp.call(args.serverId, args.toolName, parsedArgs);
         return {
           status: 'ok',
           result,
@@ -129,6 +157,7 @@ export function createMcpTools(client: nRouter): AgentTool[] {
       } catch (err: any) {
         return {
           status: 'error',
+          error: err?.message || 'Failed to call MCP tool via nRouter',
           message: err?.message || 'Failed to call MCP tool via nRouter',
         };
       }
