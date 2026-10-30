@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SupportAgentError, redact, toSafeError, mapErrorClass, isModelFallbackEligible } from '../src/errors.js';
+import { SupportAgentError, redact, toSafeError, mapErrorClass, isModelFallbackEligible, SUPPORT_CODE_BY_GATEWAY_CODE } from '../src/errors.js';
 import {
   classifyError,
   nRouterNotFoundError,
@@ -249,6 +249,113 @@ describe('errors', () => {
       expect(isModelFallbackEligible('503')).toBe(false);
       expect(isModelFallbackEligible({ status: '503' })).toBe(false);
       expect(isModelFallbackEligible(new SupportAgentError('upstream_error', 'x'))).toBe(false);
+    });
+
+    it('rejects the nrouter/promo and nrouter/hack refusals and the model deny lists', () => {
+      // Each is refused before any provider egress; another model would not change the verdict
+      // on a pot, and a deny list is a policy decision, not an availability one.
+      for (const [code, status] of [
+        ['insufficient_promo_credit', 402],
+        ['insufficient_hack_credit', 402],
+        ['pot_spend_limit_exceeded', 429],
+        ['pot_route_feature_unsupported', 400],
+        ['model_denied_by_org', 403],
+        ['model_denied_by_team', 403],
+        ['model_denied_by_key', 403],
+      ] as const) {
+        expect(isModelFallbackEligible(classifyError(code, 'refused', status)), code).toBe(false);
+        expect(isModelFallbackEligible({ status, code, message: 'refused' }), code).toBe(false);
+      }
+    });
+  });
+
+  describe('gateway error codes (spec errors table)', () => {
+    // Mapped by the plain `code`, so the answer does not depend on which SDK
+    // version classified the error: an SDK that predates a code builds the base class.
+    const cases: Array<[string, number, string]> = [
+      ['insufficient_promo_credit', 402, 'insufficient_credit'],
+      ['insufficient_hack_credit', 402, 'insufficient_credit'],
+      ['plan_allowance_exhausted', 402, 'insufficient_credit'],
+      ['plan_required', 402, 'insufficient_credit'],
+      ['insufficient_credits', 402, 'insufficient_credit'],
+      ['pot_spend_limit_exceeded', 429, 'rate_limited'],
+      ['rate_limit_exceeded', 429, 'rate_limited'],
+      ['tpm_limit_exceeded', 429, 'rate_limited'],
+      ['model_denied_by_org', 403, 'model_denied'],
+      ['model_denied_by_team', 403, 'model_denied'],
+      ['model_denied_by_key', 403, 'model_denied'],
+      ['invalid_api_key', 401, 'auth_failed'],
+      ['guardrail_blocked', 400, 'guardrail_blocked'],
+    ];
+
+    it('maps each code from an SDK error', () => {
+      for (const [code, status, expected] of cases) {
+        expect(toSafeError(classifyError(code, 'refused', status)).code, code).toBe(expected);
+      }
+    });
+
+    it('maps each code from the base error class an older SDK builds for a code it does not know', () => {
+      for (const [code, status, expected] of cases) {
+        const err = new nRouterError('refused', { code, status });
+        expect(toSafeError(err).code, code).toBe(expected);
+      }
+    });
+
+    it('maps each code from a plain error object that carries a status and a code', () => {
+      for (const [code, status, expected] of cases) {
+        expect(toSafeError({ status, code, message: 'refused' }).code, code).toBe(expected);
+      }
+    });
+
+    it('keeps the gateway message, redacted', () => {
+      const err = new nRouterError('model denied for host-secret-value', { code: 'model_denied_by_org', status: 403 });
+      expect(toSafeError(err, ['host-secret-value'])).toEqual({ code: 'model_denied', message: 'model denied for [redacted]' });
+    });
+
+    it('names every mapped code in the exported table', () => {
+      for (const [code, , expected] of cases) {
+        expect(SUPPORT_CODE_BY_GATEWAY_CODE[code], code).toBe(expected);
+      }
+    });
+
+    it('leaves a code outside the table to the class checks', () => {
+      expect(toSafeError(classifyError('input_too_large', 'too big', 400)).code).toBe('upstream_error');
+      expect(toSafeError(new nRouterError('odd', { code: 'mystery_code', status: 418 })).code).toBe('upstream_error');
+    });
+  });
+
+  describe('request id and retry wait', () => {
+    it('carries the request id so a visitor can quote it', () => {
+      const err = new nRouterError('refused', { code: 'model_denied_by_key', status: 403, requestId: 'req_123' });
+      expect(toSafeError(err)).toEqual({ code: 'model_denied', message: 'refused', requestId: 'req_123' });
+    });
+
+    it('carries a positive Retry-After wait in seconds', () => {
+      const err = classifyError('rate_limit_exceeded', 'slow down', 429, { retryAfter: 30, requestId: 'req_9' });
+      expect(toSafeError(err)).toEqual({ code: 'rate_limited', message: 'slow down', requestId: 'req_9', retryAfter: 30 });
+      const service = classifyError('service_unavailable', 'down', 503, { retryAfter: 5 });
+      expect(toSafeError(service)).toEqual({ code: 'upstream_error', message: 'down', retryAfter: 5 });
+    });
+
+    it('omits a missing, zero, negative or non-numeric wait and a blank request id', () => {
+      for (const retryAfter of [null, 0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+        const err = classifyError('rate_limit_exceeded', 'slow down', 429, { retryAfter, requestId: '' });
+        expect(toSafeError(err)).toEqual({ code: 'rate_limited', message: 'slow down' });
+      }
+      expect(toSafeError({ status: 429, message: 'x', retryAfter: '30', requestId: 7 })).toEqual({ code: 'rate_limited', message: 'x' });
+    });
+
+    it('never attaches either to a package error, an abort or an unknown error', () => {
+      const pkg = Object.assign(new SupportAgentError('invalid_request', 'bad'), { requestId: 'r', retryAfter: 3 });
+      expect(toSafeError(pkg)).toEqual({ code: 'invalid_request', message: 'bad' });
+      const aborted = Object.assign(new FakeAbortError('stop'), { requestId: 'r', retryAfter: 3 });
+      expect(toSafeError(aborted)).toEqual({ code: 'aborted', message: 'stop' });
+      expect(toSafeError(Object.assign(new Error('x'), { requestId: 'r' }))).toEqual({ code: 'internal_error', message: 'An internal error occurred.' });
+    });
+
+    it('redacts a key-shaped request id rather than echoing it', () => {
+      const err = new nRouterError('refused', { status: 500, requestId: 'sk-nrouter-leak123' });
+      expect(toSafeError(err).requestId).toBe('[redacted]');
     });
   });
 });

@@ -1,5 +1,5 @@
 import { createMemory } from '@nrouter_ai/sdk';
-import type { SupportAgent, SupportAgentConfig, ChatRequest, AgentEvent, ChatTurn, CostEvent, FeedbackInput } from './types.js';
+import type { SupportAgent, SupportAgentConfig, ChatRequest, AgentEvent, ChatTurn, CostEvent, FeedbackInput, SafeError } from './types.js';
 import { resolveConfig } from './config.js';
 import { validateChatRequest, validateTrustedContext } from './limits.js';
 import { latestQuestion, normalizeQuestion } from './gaps.js';
@@ -25,6 +25,13 @@ import { isSmallTalk } from './small-talk.js';
 import { responseCacheKey } from './cache.js';
 import { classifyLocal } from './jev.js';
 import { curatedAnswer } from './curated-answers.js';
+
+function toErrorEvent(safeErr: SafeError): AgentEvent {
+  const ev: AgentEvent = { type: 'error', code: safeErr.code, message: safeErr.message };
+  if (safeErr.requestId !== undefined) ev.requestId = safeErr.requestId;
+  if (safeErr.retryAfter !== undefined) ev.retryAfter = safeErr.retryAfter;
+  return ev;
+}
 
 export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
   const cfg = resolveConfig(config);
@@ -304,13 +311,13 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
                yield* answer(systemRetry);
             } catch (retryErr: any) {
                const safeRetryErr = toSafeError(retryErr, config.apiKey ? [config.apiKey] : undefined);
-               yield { type: 'error', code: safeRetryErr.code, message: safeRetryErr.message };
+               yield toErrorEvent(safeRetryErr);
                yield* searchOnlyCost();
                yield { type: 'done' };
                return;
             }
          } else {
-            yield { type: 'error', code: safeErr.code, message: safeErr.message };
+            yield toErrorEvent(safeErr);
             yield* searchOnlyCost();
             yield { type: 'done' };
             return;
@@ -407,11 +414,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       yield { type: 'done' };
     } catch (err: any) {
       const safeErr = toSafeError(err, config.apiKey ? [config.apiKey] : undefined);
-      if (safeErr.code === 'aborted') {
-         yield { type: 'error', code: 'aborted', message: safeErr.message };
-      } else {
-         yield { type: 'error', code: safeErr.code, message: safeErr.message };
-      }
+      yield toErrorEvent(safeErr);
       yield { type: 'done' };
     }
   }

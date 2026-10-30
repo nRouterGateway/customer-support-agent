@@ -785,6 +785,13 @@ describe('SupportAgent: model fallback, booking action and suggestions', () => {
     ['429', () => classifyError(null, 'slow down', 429), 'rate_limited'],
     ['guardrail block', () => classifyError(null, 'request blocked by a guardrail', 400), 'guardrail_blocked'],
     ['abort', () => Object.assign(new Error('aborted'), { name: 'AbortError' }), 'aborted'],
+    ['402 insufficient_promo_credit', () => classifyError('insufficient_promo_credit', 'no promo credit', 402), 'insufficient_credit'],
+    ['402 insufficient_hack_credit', () => classifyError('insufficient_hack_credit', 'no hack credit', 402), 'insufficient_credit'],
+    ['429 pot_spend_limit_exceeded', () => classifyError('pot_spend_limit_exceeded', 'daily window used', 429), 'rate_limited'],
+    ['400 pot_route_feature_unsupported', () => classifyError('pot_route_feature_unsupported', 'unsupported feature', 400), 'upstream_error'],
+    ['403 model_denied_by_org', () => classifyError('model_denied_by_org', 'denied', 403), 'model_denied'],
+    ['403 model_denied_by_team', () => classifyError('model_denied_by_team', 'denied', 403), 'model_denied'],
+    ['403 model_denied_by_key', () => classifyError('model_denied_by_key', 'denied', 403), 'model_denied'],
   ])('never falls back on %s', async (_name, makeErr, code) => {
     const { streamChat } = await import('../src/client.js');
     vi.mocked(streamChat).mockImplementation(async () => { throw makeErr(); });
@@ -1064,6 +1071,30 @@ describe('SupportAgent: model fallback, booking action and suggestions', () => {
     const events = await collect(agent, user('book a demo'));
 
     expect(events.map(e => e.type)).toEqual(['confidence', 'error', 'done']);
+  });
+
+  it('puts the request id and the Retry-After wait of a refusal on the error event', async () => {
+    const { streamChat } = await import('../src/client.js');
+    vi.mocked(streamChat).mockImplementation(async () => {
+      throw classifyError('rate_limit_exceeded', 'slow down', 429, { requestId: 'req_abc', retryAfter: 12 });
+    });
+
+    const agent = createSupportAgent({ client: fakeClient, model: 'a', knowledge: fakeIndex });
+    const events = await collect(agent, user('hi'));
+
+    expect(events.find(e => e.type === 'error')).toEqual({
+      type: 'error', code: 'rate_limited', message: 'slow down', requestId: 'req_abc', retryAfter: 12,
+    });
+  });
+
+  it('adds neither field when the refusal carries none', async () => {
+    const { streamChat } = await import('../src/client.js');
+    vi.mocked(streamChat).mockImplementation(async () => { throw classifyError(null, 'slow down', 429); });
+
+    const agent = createSupportAgent({ client: fakeClient, model: 'a', knowledge: fakeIndex });
+    const events = await collect(agent, user('hi'));
+
+    expect(events.find(e => e.type === 'error')).toEqual({ type: 'error', code: 'rate_limited', message: 'slow down' });
   });
 
   describe('response cache in agent', () => {

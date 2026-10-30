@@ -50,12 +50,16 @@ export function encodeEvent(ev: AgentEvent): string {
       if (ev.searchCostUsd !== undefined) payload.searchCostUsd = ev.searchCostUsd;
       return `data: ${JSON.stringify(payload)}\n\n`;
     }
-    case 'error':
-      return `data: ${JSON.stringify({
+    case 'error': {
+      const payload: Record<string, unknown> = {
         nrouter_event: 'error',
         code: ev.code,
         message: ev.message
-      })}\n\n`;
+      };
+      if (ev.requestId !== undefined) payload.requestId = ev.requestId;
+      if (ev.retryAfter !== undefined) payload.retryAfter = ev.retryAfter;
+      return `data: ${JSON.stringify(payload)}\n\n`;
+    }
     case 'done':
       return 'data: [DONE]\n\n';
   }

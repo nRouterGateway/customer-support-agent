@@ -234,6 +234,14 @@ export interface SupportAgentHooks {
 export interface SafeError {
   code: SupportAgentErrorCode;
   message: string;
+  /**
+   * The gateway's `x-nr-request-id` for the refused call, when it sent one: the
+   * one join key between the error a visitor sees and the request record behind
+   * it, so show it wherever the error is shown.
+   */
+  requestId?: string;
+  /** Seconds the gateway asked the caller to wait before retrying (Retry-After), when it sent a positive one. */
+  retryAfter?: number;
 }
 
 export type SupportAgentErrorCode =
@@ -244,6 +252,8 @@ export type SupportAgentErrorCode =
   | 'insufficient_credit'
   | 'rate_limited'
   | 'guardrail_blocked'
+  /** HTTP 403 `model_denied_by_org` / `_team` / `_key`: the model is on an organization, team or key deny list. */
+  | 'model_denied'
   | 'upstream_error'
   | 'aborted'
   | 'internal_error';
@@ -398,7 +408,7 @@ export type AgentEvent =
   | { type: 'suggestions'; questions: string[] }
   | { type: 'action'; action: 'book_meeting'; url: string; label: string }
   | { type: 'cost'; costUsd: number | null; status: 'exact' | 'unpriced'; requestId?: string; chatCostUsd?: number | null; searchCostUsd?: number | null; actualModel?: string | null; routingChain?: string | null }
-  | { type: 'error'; code: SupportAgentErrorCode; message: string }
+  | { type: 'error'; code: SupportAgentErrorCode; message: string; requestId?: string; retryAfter?: number }
   | { type: 'done' };
 
 export interface SupportAgent {

@@ -80,7 +80,16 @@ export function classifyLocal(text: string): JevClassificationResult {
   }
 
   // Virtual keys & API keys
-  if (q.includes('virtual key') || q.includes('spend ceiling') || q.includes('restrict model') || q.includes('ceiling')) {
+  if (
+    q.includes('virtual key') ||
+    q.includes('spend ceiling') ||
+    q.includes('restrict model') ||
+    q.includes('ceiling') ||
+    q.includes('deny list') ||
+    q.includes('denylist') ||
+    q.includes('model_denied') ||
+    q.includes('model denied')
+  ) {
     return {
       category: 'virtual_keys',
       confidence: 0.92,
@@ -143,7 +152,15 @@ export function classifyLocal(text: string): JevClassificationResult {
   }
 
   // Quota & Fallback
-  if (q.includes('quota') || q.includes('429') || q.includes('fallback') || q.includes('rate limit') || /(\b|\d)(rps|rpd|rpm|tpm)s?\b/.test(q)) {
+  if (
+    q.includes('quota') ||
+    q.includes('429') ||
+    q.includes('fallback') ||
+    q.includes('rate limit') ||
+    /(\b|\d)(rps|rpd|rpm|tpm)s?\b/.test(q) ||
+    q.includes('pot_spend_limit') ||
+    q.includes('pot_window')
+  ) {
     return {
       category: 'quota_fallback',
       confidence: 0.91,
@@ -154,13 +171,25 @@ export function classifyLocal(text: string): JevClassificationResult {
   }
 
   // Billing & Credits
-  if (q.includes('billing') || (q.includes('credit') && !q.includes('credit card')) || q.includes('402') || q.includes('platform fee') || q.includes('invoice') || q.includes('subscription')) {
+  if (
+    q.includes('billing') ||
+    (q.includes('credit') && !q.includes('credit card')) ||
+    q.includes('402') ||
+    q.includes('platform fee') ||
+    q.includes('invoice') ||
+    q.includes('subscription') ||
+    q.includes('nrouter/promo') ||
+    q.includes('nrouter/hack') ||
+    q.includes('promo pot') ||
+    q.includes('hack pot') ||
+    q.includes('pot_route_feature_unsupported')
+  ) {
     return {
       category: 'billing',
       confidence: 0.91,
       isVectorGrounded: true,
       isEscalation: false,
-      explanation: 'Inquiry regarding billing, credits, platform fees, or payment requirements.',
+      explanation: 'Inquiry regarding billing, credits, platform fees, promotional/hackathon pots, or payment requirements.',
     };
   }
 

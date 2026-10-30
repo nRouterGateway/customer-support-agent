@@ -60,6 +60,11 @@ describe('encodeEvent', () => {
     expect(encodeEvent(ev)).toBe('data: {"nrouter_event":"error","code":"internal_error","message":"failed"}\n\n');
   });
 
+  it('encodes the request id and Retry-After wait of an error when present', () => {
+    const ev: AgentEvent = { type: 'error', code: 'rate_limited', message: 'slow down', requestId: 'req_1', retryAfter: 30 };
+    expect(encodeEvent(ev)).toBe('data: {"nrouter_event":"error","code":"rate_limited","message":"slow down","requestId":"req_1","retryAfter":30}\n\n');
+  });
+
   it('encodes a book_meeting action', () => {
     const ev: AgentEvent = { type: 'action', action: 'book_meeting', url: 'https://example.com/book', label: 'Book a meeting' };
     expect(encodeEvent(ev)).toBe('data: {"nrouter_event":"action","action":"book_meeting","url":"https://example.com/book","label":"Book a meeting"}\n\n');
