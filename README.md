@@ -24,12 +24,10 @@ npm run example             # http://127.0.0.1:4175
 The first start indexes the sample docs in `examples/quickstart/docs/` and writes `kb.json`. Ask it
 "how do I get a refund?" and it answers from those files, with the source linked.
 
-For the nRouter support deployment, point `DOCS_DIR` at a synced copy of the public MDX docs in
-`nrouter-frontend-ui/resources/web/content/docs` and set `DOCS_BASE_URL=https://nrouter.ai/docs`.
-That source currently includes the account, dashboard guides, API references, frameworks, and SDK
-guides. Keep this larger corpus on RAG; CAG is for small corpora that fit entirely in the model
-context. The deployment must receive updated docs when the frontend docs change, then rebuild the
-knowledge index before serving traffic.
+For production deployments, point `DOCS_DIR` at your synced docs folder and set `DOCS_BASE_URL=https://nrouter.ai/docs`
+(or your site's documentation root). The documentation corpus includes guides and API references. Keep larger corpora on
+RAG; CAG (context-augmented generation) is designed for small corpora that fit entirely in context. Rebuild the knowledge
+index whenever documentation updates.
 
 Everything is in two files you can read in a few minutes:
 [`examples/quickstart/server.mjs`](examples/quickstart/server.mjs) (the agent and its endpoint) and
