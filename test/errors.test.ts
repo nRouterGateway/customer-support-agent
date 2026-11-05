@@ -251,7 +251,7 @@ describe('errors', () => {
       expect(isModelFallbackEligible(new SupportAgentError('upstream_error', 'x'))).toBe(false);
     });
 
-    it('rejects the nrouter/promo and nrouter/hack refusals and the model deny lists', () => {
+    it('rejects the Promo and Hack direct-model pot refusals and the model deny lists', () => {
       // Each is refused before any provider egress; another model would not change the verdict
       // on a pot, and a deny list is a policy decision, not an availability one.
       for (const [code, status] of [

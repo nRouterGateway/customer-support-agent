@@ -95,9 +95,9 @@ export function isModelFallbackEligible(err: unknown): boolean {
  * that predates a code builds the base `nRouterError` for it, which the class
  * checks alone would call an upstream failure.
  *
- * - The 402 funding refusals, including `nrouter/promo` and `nrouter/hack`
- *   credit, are `insufficient_credit`.
- * - Every 429 window, including a used-up `nrouter/promo` / `nrouter/hack`
+ * - The 402 funding refusals, including `Promo` (`promo_model_policy`) and `Hack` (`hack_model_policy`)
+ *   direct-model credit, are `insufficient_credit`.
+ * - Every 429 window, including a used-up `Promo` / `Hack`
  *   spend window, is `rate_limited`.
  * - The 403 model deny lists are `model_denied`: a policy refusal, not an
  *   upstream failure, and retrying the same model is refused the same way.

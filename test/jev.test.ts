@@ -28,8 +28,8 @@ describe('jev classification module', () => {
     expect(classifyLocal('How does model_denied_by_team or model_denied_by_key work?').category).toBe('virtual_keys');
     expect(classifyLocal('How do I configure a model deny list?').category).toBe('virtual_keys');
     expect(classifyLocal('What happens when pot_spend_limit_exceeded occurs?').category).toBe('quota_fallback');
-    expect(classifyLocal('How does promotional credit work on nrouter/promo?').category).toBe('billing');
-    expect(classifyLocal('Can I run hackathon models using nrouter/hack?').category).toBe('billing');
+    expect(classifyLocal('How does promotional credit work on Promo models (promo_model_policy)?').category).toBe('billing');
+    expect(classifyLocal('Can I run hackathon models using Hack (hack_model_policy)?').category).toBe('billing');
     expect(classifyLocal('Why was my call refused with pot_route_feature_unsupported?').category).toBe('billing');
     expect(classifyLocal('How do I set nrouter_optimize to cost for nrouter/auto?').category).toBe('general_inquiry');
   });

@@ -178,8 +178,12 @@ export function classifyLocal(text: string): JevClassificationResult {
     q.includes('platform fee') ||
     q.includes('invoice') ||
     q.includes('subscription') ||
-    q.includes('nrouter/promo') ||
-    q.includes('nrouter/hack') ||
+    q.includes('promo_model_policy') ||
+    q.includes('hack_model_policy') ||
+    q.includes('promo model') ||
+    q.includes('hack model') ||
+    q.includes('promo credit') ||
+    q.includes('hack credit') ||
     q.includes('promo pot') ||
     q.includes('hack pot') ||
     q.includes('pot_route_feature_unsupported')
