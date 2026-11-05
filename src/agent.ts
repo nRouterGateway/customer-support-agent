@@ -1,4 +1,4 @@
-import { createMemory } from '@nrouter_ai/sdk';
+import { createMemory, type nRouter } from '@nrouter_ai/sdk';
 import type { SupportAgent, SupportAgentConfig, ChatRequest, AgentEvent, ChatTurn, CostEvent, FeedbackInput, SafeError } from './types.js';
 import { resolveConfig } from './config.js';
 import { validateChatRequest, validateTrustedContext } from './limits.js';
@@ -23,8 +23,144 @@ import { matchesBookingIntent, matchesHumanIntent } from './booking.js';
 import { buildSuggestions } from './suggestions.js';
 import { isSmallTalk } from './small-talk.js';
 import { responseCacheKey } from './cache.js';
-import { classifyLocal } from './jev.js';
+import { classifyLocal, classifyWithJev, type JevClassifyOptions, type JevDecision, type JevSupportCategory } from './jev.js';
 import { curatedAnswer } from './curated-answers.js';
+
+export type NRouter = nRouter;
+
+export interface SupportTurnInput {
+  message: string;
+  tenantId?: string;
+  userId?: string;
+  sessionId?: string;
+}
+
+export interface SupportPlaybookEntry {
+  action: string;
+  route: string;
+  requiresDocs: boolean;
+  escalateToHuman: boolean;
+  template: string;
+}
+
+export interface SupportTurnOutput {
+  category: JevSupportCategory;
+  confidence: number;
+  isVectorGrounded: boolean;
+  isEscalation: boolean;
+  action: string;
+  route: string;
+  reply: string;
+  decision: JevDecision;
+  playbook: SupportPlaybookEntry;
+}
+
+export const PLAYBOOK: Record<JevSupportCategory, SupportPlaybookEntry> = {
+  dashboard: {
+    action: 'guide_dashboard',
+    route: 'https://app.nrouter.ai',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Open the nRouter dashboard to inspect spend logs, Timeline Gantt, and the Debug & Trace Canvas.',
+  },
+  mcp: {
+    action: 'guide_mcp',
+    route: 'https://nrouter.ai/docs/guides/mcp',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Configure and probe MCP servers in the Tools Hub or connect via https://api.nrouter.ai/mcp.',
+  },
+  billing: {
+    action: 'guide_billing',
+    route: 'https://app.nrouter.ai/billing',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Review your credit balance, platform fee tier, and promo/hack pot allowances in Billing.',
+  },
+  api_keys: {
+    action: 'guide_api_keys',
+    route: 'https://app.nrouter.ai/keys',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Create and manage sk-nrouter-* keys from the Keys page in the dashboard.',
+  },
+  virtual_keys: {
+    action: 'guide_virtual_keys',
+    route: 'https://app.nrouter.ai/keys',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Configure per-key spend ceilings, RPM/TPM limits, and model allow/deny lists in Keys.',
+  },
+  guardrails: {
+    action: 'guide_guardrails',
+    route: 'https://nrouter.ai/docs/guides/guardrails',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Configure PII redaction, moderation thresholds, and custom webhook guardrails in Guardrails.',
+  },
+  quota_fallback: {
+    action: 'guide_quota_fallback',
+    route: 'https://nrouter.ai/docs/guides/routing',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'Check RPM/TPM/RPS/RPD rate limits and configure nrouter_fallbacks for automatic failover.',
+  },
+  booking: {
+    action: 'book_meeting',
+    route: 'https://nrouter.ai/contact',
+    requiresDocs: false,
+    escalateToHuman: false,
+    template: 'Schedule a demo or architecture review session with the nRouter team.',
+  },
+  escalation: {
+    action: 'escalate_human',
+    route: 'https://nrouter.ai/support',
+    requiresDocs: false,
+    escalateToHuman: true,
+    template: 'Escalating your request to a human support engineer.',
+  },
+  small_talk: {
+    action: 'greet_user',
+    route: 'https://nrouter.ai/docs',
+    requiresDocs: false,
+    escalateToHuman: false,
+    template: 'Hello! How can I help you with nRouter today?',
+  },
+  general_inquiry: {
+    action: 'answer_general',
+    route: 'https://nrouter.ai/docs',
+    requiresDocs: true,
+    escalateToHuman: false,
+    template: 'I can help answer questions about nRouter models, routing, APIs, and documentation.',
+  },
+  off_topic: {
+    action: 'redirect_scope',
+    route: 'https://nrouter.ai/docs',
+    requiresDocs: false,
+    escalateToHuman: false,
+    template: 'I can help with nRouter support, dashboard, API, billing, model, and MCP questions.',
+  },
+};
+
+export async function handleSupportTurnWithJev(
+  turn: SupportTurnInput,
+  client: NRouter,
+  options?: JevClassifyOptions,
+): Promise<SupportTurnOutput> {
+  const decision = await classifyWithJev(turn.message, client, options);
+  const playbook = PLAYBOOK[decision.category];
+  return {
+    category: decision.category,
+    confidence: decision.confidence,
+    isVectorGrounded: decision.isVectorGrounded,
+    isEscalation: decision.isEscalation || playbook.escalateToHuman,
+    action: playbook.action,
+    route: playbook.route,
+    reply: playbook.template,
+    decision,
+    playbook,
+  };
+}
 
 function toErrorEvent(safeErr: SafeError): AgentEvent {
   const ev: AgentEvent = { type: 'error', code: safeErr.code, message: safeErr.message };

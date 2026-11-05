@@ -19,12 +19,65 @@ export type JevSupportCategory =
   | 'general_inquiry'
   | 'off_topic';
 
+export const JEV_SUPPORT_CATEGORIES: readonly JevSupportCategory[] = [
+  'dashboard',
+  'mcp',
+  'billing',
+  'api_keys',
+  'virtual_keys',
+  'guardrails',
+  'quota_fallback',
+  'booking',
+  'escalation',
+  'small_talk',
+  'general_inquiry',
+  'off_topic',
+];
+
+export function isValidJevSupportCategory(value: unknown): value is JevSupportCategory {
+  return typeof value === 'string' && (JEV_SUPPORT_CATEGORIES as readonly string[]).includes(value);
+}
+
 export interface JevClassificationResult {
   category: JevSupportCategory;
   confidence: number;
   isVectorGrounded: boolean;
   isEscalation: boolean;
   explanation?: string;
+}
+
+export type JevDecision = JevClassificationResult;
+
+export interface JevClassifyOptions {
+  model?: string;
+  signal?: AbortSignal;
+  minConfidence?: number;
+}
+
+export interface JevSystemOneChoiceQuestion {
+  type: 'choice';
+  question: string;
+  options: readonly JevSupportCategory[];
+}
+
+export interface JevSystemOnePayload {
+  state: string;
+  questions: {
+    choice: JevSystemOneChoiceQuestion;
+  };
+}
+
+export function buildJevSystemOnePayload(ticketText: string): JevSystemOnePayload {
+  return {
+    state: ticketText,
+    questions: {
+      choice: {
+        type: 'choice',
+        question: 'Classify the user support query into the single best nRouter support category.',
+        options: JEV_SUPPORT_CATEGORIES,
+      },
+    },
+  };
 }
 
 /**
@@ -237,8 +290,20 @@ export function classifyLocal(text: string): JevClassificationResult {
 export async function classifyWithJev(
   client: nRouter,
   question: string,
-  options?: { model?: string; signal?: AbortSignal },
+  options?: JevClassifyOptions,
+): Promise<JevClassificationResult>;
+export async function classifyWithJev(
+  question: string,
+  client: nRouter,
+  options?: JevClassifyOptions,
+): Promise<JevClassificationResult>;
+export async function classifyWithJev(
+  clientOrQuestion: nRouter | string,
+  questionOrClient: string | nRouter,
+  options?: JevClassifyOptions,
 ): Promise<JevClassificationResult> {
+  const question = typeof clientOrQuestion === 'string' ? clientOrQuestion : (questionOrClient as string);
+  const client = (typeof clientOrQuestion === 'string' ? questionOrClient : clientOrQuestion) as nRouter;
   const local = classifyLocal(question);
   // High-confidence deterministic cases (human handoff, small talk, booking) do not require a remote model call
   if (local.confidence >= 0.95) {
@@ -246,6 +311,7 @@ export async function classifyWithJev(
   }
 
   const model = options?.model ?? JEV_MODEL;
+  const minConfidence = options?.minConfidence ?? 0.6;
   const systemPrompt = `You are Jev, nRouter's autonomous task and intent classifier.
 Classify the user support query into exactly one of these categories:
 - dashboard
@@ -273,16 +339,48 @@ Respond ONLY with valid JSON in this exact shape:
       ...(options?.signal ? { signal: options?.signal } : {}),
     });
 
-    const body = res.body as { choices?: Array<{ message?: { content?: unknown } }> };
+    const body = res.body as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+      answers?: {
+        choice?: { choice?: unknown; confidence?: unknown };
+        decision?: { choice?: unknown; confidence?: unknown };
+      };
+    };
+
+    const answerObj = body.answers?.choice ?? body.answers?.decision;
+    if (
+      answerObj &&
+      isValidJevSupportCategory(answerObj.choice) &&
+      typeof answerObj.confidence === 'number' &&
+      Number.isFinite(answerObj.confidence) &&
+      answerObj.confidence >= minConfidence &&
+      answerObj.confidence <= 1
+    ) {
+      return {
+        category: answerObj.choice,
+        confidence: answerObj.confidence,
+        isVectorGrounded: answerObj.choice !== 'off_topic' && answerObj.choice !== 'small_talk' && answerObj.choice !== 'booking' && answerObj.choice !== 'escalation',
+        isEscalation: answerObj.choice === 'escalation',
+        explanation: local.explanation,
+      };
+    }
+
     const rawContent = body.choices?.[0]?.message?.content;
     if (typeof rawContent === 'string' && rawContent.trim()) {
       const match = rawContent.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
-        if (parsed && typeof parsed.category === 'string') {
+        if (
+          parsed &&
+          isValidJevSupportCategory(parsed.category) &&
+          typeof parsed.confidence === 'number' &&
+          Number.isFinite(parsed.confidence) &&
+          parsed.confidence >= minConfidence &&
+          parsed.confidence <= 1
+        ) {
           return {
-            category: parsed.category as JevSupportCategory,
-            confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.9,
+            category: parsed.category,
+            confidence: parsed.confidence,
             isVectorGrounded: typeof parsed.isVectorGrounded === 'boolean' ? parsed.isVectorGrounded : local.isVectorGrounded,
             isEscalation: typeof parsed.isEscalation === 'boolean' ? parsed.isEscalation : local.isEscalation,
             explanation: typeof parsed.explanation === 'string' ? parsed.explanation : local.explanation,

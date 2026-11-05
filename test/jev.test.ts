@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { classifyLocal, classifyWithJev, JEV_MODEL } from '../src/jev.js';
+import {
+  classifyLocal,
+  classifyWithJev,
+  buildJevSystemOnePayload,
+  isValidJevSupportCategory,
+  JEV_MODEL,
+  JEV_SUPPORT_CATEGORIES,
+} from '../src/jev.js';
+import { handleSupportTurnWithJev, PLAYBOOK } from '../src/agent.js';
 import type { nRouter } from '@nrouter_ai/sdk';
 
 describe('jev classification module', () => {
@@ -85,5 +93,124 @@ describe('jev classification module', () => {
     const result = await classifyWithJev(failingClient, 'How do I add an MCP server in nRouter?');
     expect(result.category).toBe('mcp');
     expect(result.isVectorGrounded).toBe(true);
+  });
+
+  it('validates all 12 JEV_SUPPORT_CATEGORIES and falls back to classifyLocal on invalid LLM category instead of throwing TypeError in PLAYBOOK', async () => {
+    expect(JEV_SUPPORT_CATEGORIES).toHaveLength(12);
+    for (const cat of JEV_SUPPORT_CATEGORIES) {
+      expect(isValidJevSupportCategory(cat)).toBe(true);
+      expect(PLAYBOOK[cat]).toBeDefined();
+    }
+    expect(isValidJevSupportCategory('unknown_hallucinated_category')).toBe(false);
+    expect(isValidJevSupportCategory(null)).toBe(false);
+    expect(isValidJevSupportCategory(42)).toBe(false);
+
+    const hallucinatingClient = {
+      nr: {
+        chat: vi.fn().mockResolvedValue({
+          body: {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    category: 'hallucinated_category_xyz',
+                    confidence: 0.99,
+                    isVectorGrounded: true,
+                    isEscalation: false,
+                  }),
+                },
+              },
+            ],
+          },
+        }),
+      },
+    } as unknown as nRouter;
+
+    const turnOut = await handleSupportTurnWithJev(
+      { message: 'How do I add an MCP server in nRouter?' },
+      hallucinatingClient,
+    );
+    expect(turnOut.category).toBe('mcp');
+    expect(turnOut.action).toBe('guide_mcp');
+    expect(turnOut.playbook).toEqual(PLAYBOOK.mcp);
+  });
+
+  it('falls back to classifyLocal when LLM confidence is missing, NaN, or below 0.6 (never fabricates 0.9)', async () => {
+    for (const badPayload of [
+      { category: 'off_topic' },
+      { category: 'off_topic', confidence: Number.NaN },
+      { category: 'off_topic', confidence: 0.45 },
+      { category: 'off_topic', confidence: '0.95' },
+    ]) {
+      const client = {
+        nr: {
+          chat: vi.fn().mockResolvedValue({
+            body: {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify(badPayload),
+                  },
+                },
+              ],
+            },
+          }),
+        },
+      } as unknown as nRouter;
+
+      // Local classifies this as 'billing' with confidence 0.91 (not 0.9)
+      const decision = await classifyWithJev(client, 'Why did my call fail with 402 payment required?');
+      expect(decision.category).toBe('billing');
+      expect(decision.confidence).toBe(0.91);
+      expect(decision.confidence).not.toBe(0.9);
+    }
+  });
+
+  it('builds the native /v1/systemone choice payload and runs handleSupportTurnWithJev end-to-end', async () => {
+    const payload = buildJevSystemOnePayload('Where can I view spend logs in the dashboard?');
+    expect(payload).toEqual({
+      state: 'Where can I view spend logs in the dashboard?',
+      questions: {
+        choice: {
+          type: 'choice',
+          question: expect.any(String),
+          options: JEV_SUPPORT_CATEGORIES,
+        },
+      },
+    });
+
+    const validClient = {
+      nr: {
+        chat: vi.fn().mockResolvedValue({
+          body: {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    category: 'guardrails',
+                    confidence: 0.88,
+                    isVectorGrounded: true,
+                    isEscalation: false,
+                    explanation: 'Guardrail configuration inquiry',
+                  }),
+                },
+              },
+            ],
+          },
+        }),
+      },
+    } as unknown as nRouter;
+
+    const output = await handleSupportTurnWithJev(
+      { message: 'Tell me about nRouter capabilities for content safety', tenantId: 'org-1', userId: 'u-1' },
+      validClient,
+    );
+    expect(output.category).toBe('guardrails');
+    expect(output.confidence).toBe(0.88);
+    expect(output.isVectorGrounded).toBe(true);
+    expect(output.isEscalation).toBe(false);
+    expect(output.action).toBe('guide_guardrails');
+    expect(output.route).toBe('https://nrouter.ai/docs/guides/guardrails');
+    expect(output.reply).toContain('Guardrails');
   });
 });
