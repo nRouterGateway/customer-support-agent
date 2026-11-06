@@ -341,3 +341,6 @@ Maintain one index and one agent per organisation. Audiences are entitlement tag
 
 ## Limits
 Defaults: `maxMessages: 12`, `maxMessageChars: 4000`, `maxPageContextChars: 1000`. Customize via `limits` config.
+
+## Development
+Active development happens on the `development` branch (`origin/development`). The `main` branch is locked down and updated only via Pull Request (`development` → `main`).

@@ -4,11 +4,13 @@ Public repository (`github.com/nRouterGateway/customer-support-agent`). Never co
 
 ## Package: `@nrouter_ai/support-agent`
 Streaming customer-support agent library built on nRouter (Rule #19).
+- **In-process support agent:** Calls gateway via standard gateway client (`@nrouter_ai/sdk`). Configurable against `https://api.dev.nrouter.ai` or local `:4000`.
 - **Zero-DB default:** In-memory cosine search over static JSON index (`support-agent build-kb`); optional pgvector store.
 - **Pinned SDK dependency:** Single runtime dep `@nrouter_ai/sdk`. All gateway calls route through SDK; zero raw fetch.
 - **Edge-safe core:** `src/index.ts` has no `node:` imports; Node/CLI helpers isolated in `src/node.ts` and `src/cli.ts`.
 - **Host trust boundary:** Identity and tenancy come strictly from host `TrustedContext`, never untrusted client payloads.
 - **Gateway integration:** Web search is a second billed gateway call; turn costs stream via `cost` events.
+- **Branching (Rule #20):** Develops on `development` (`origin/development`), `main` locked down (PR only).
 
 ## Commands
 ```bash
