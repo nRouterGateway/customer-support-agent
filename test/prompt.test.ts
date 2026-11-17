@@ -3,6 +3,14 @@ import { buildSystemPrompt, buildCitations } from '../src/prompt.js';
 import type { ScoredChunk, WebSource, EndUserIdentity } from '../src/types.js';
 
 describe('buildSystemPrompt', () => {
+  it('requires citations to match supplied sources and never be invented', () => {
+    const prompt = buildSystemPrompt({ agentName: 'Bot', instructions: '', chunks: [] });
+    expect(prompt).toContain('Cite only sources present in the supplied citation list');
+    expect(prompt).toContain('Never invent a source number');
+    // The library cannot promise how a host UI renders markers.
+    expect(prompt).not.toContain('chat UI converts');
+  });
+
   it('includes basic parts and prevents injection in page context', () => {
     const input = {
       agentName: 'SupportBot',

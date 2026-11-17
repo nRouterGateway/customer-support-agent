@@ -178,12 +178,17 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       const validatedReq = validateChatRequest(req, cfg.limits);
       const validatedCtx = ctx ? validateTrustedContext(ctx) : {};
       const question = latestQuestion(validatedReq.messages);
-      const curated = curatedAnswer(question);
+      // A request for a human or a meeting must reach the escalation and booking
+      // logic below, so the FAQ never answers it.
+      const wantsHandoff = matchesHumanIntent(question) || (cfg.booking !== null && matchesBookingIntent(question));
+      const curated = cfg.curatedAnswers && !wantsHandoff ? curatedAnswer(question) : undefined;
       if (curated) {
         for (const event of curated) yield event;
         if (cfg.hooks.onTurnMetrics) callHook(cfg.hooks, 'onTurnMetrics', {
           strategy: cfg.knowledgeStrategy,
+          // cacheHit reports the response cache; a FAQ answer is reported as faqHit.
           cacheHit: false,
+          faqHit: true,
           knowledgeMs: 0,
           answerMs: 0,
           totalMs: Date.now() - requestStartedAt,

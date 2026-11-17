@@ -35,8 +35,11 @@ describe('SupportAgent', () => {
   let streamGenerator: any;
   const fakeIndex = { version: 1 as const, embeddingModel: 't', dimensions: 2, createdAt: '2026', chunks: [] };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // A failing test must not leak its question into later tests.
+    const { latestQuestion } = await import('../src/gaps.js');
+    vi.mocked(latestQuestion).mockReturnValue('Q');
     streamGenerator = async function* () {
       yield 'token1';
       yield 'token2';
@@ -97,6 +100,90 @@ describe('SupportAgent', () => {
     expect(callHook).toHaveBeenCalledWith(expect.objectContaining({ onTurnMetrics: metrics }), 'onTurnMetrics', expect.objectContaining({
       strategy: 'cag', cacheHit: false, contextChars: 'Public guide'.length,
     }));
+  });
+
+  it('answers a documented FAQ before retrieval or a model call, reported as faqHit (not a response-cache hit)', async () => {
+    const { latestQuestion } = await import('../src/gaps.js');
+    const { retrieve } = await import('../src/retrieval.js');
+    const { callHook } = await import('../src/hooks.js');
+    vi.mocked(latestQuestion).mockReturnValueOnce('How does the platform fee work?');
+    const metrics = vi.fn();
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, hooks: { onTurnMetrics: metrics }, responseCache: false });
+
+    const events = [];
+    for await (const event of agent.chat({ messages: [{ role: 'user', content: 'platform fee?' }] })) events.push(event);
+
+    expect(events.map((event) => event.type)).toEqual(['confidence', 'citations', 'token', 'done']);
+    expect(vi.mocked(retrieve)).not.toHaveBeenCalled();
+    expect(fakeClient.nr.stream).not.toHaveBeenCalled();
+    expect(callHook).toHaveBeenCalledWith(expect.objectContaining({ onTurnMetrics: metrics }), 'onTurnMetrics', expect.objectContaining({
+      cacheHit: false, faqHit: true, knowledgeMs: 0, answerMs: 0,
+    }));
+  });
+
+  it('serves the same public FAQ text to every tenant without loading any account data', async () => {
+    const { latestQuestion } = await import('../src/gaps.js');
+    vi.mocked(latestQuestion).mockReturnValue('How does the platform fee work?');
+    const load = vi.fn().mockResolvedValue('Plan: Secret-A');
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, userDataProvider: { load } });
+
+    const run = async (tenantId: string) => {
+      const events = [];
+      for await (const event of agent.chat({ messages: [{ role: 'user', content: 'fee?' }] }, { tenantId, userId: `u-${tenantId}` })) events.push(event);
+      return events;
+    };
+    const a = await run('tenant-a');
+    const b = await run('tenant-b');
+
+    expect(a).toEqual(b);
+    expect(load).not.toHaveBeenCalled();
+    expect(JSON.stringify(a)).not.toContain('Secret-A');
+    vi.mocked(latestQuestion).mockReturnValue('Q');
+  });
+
+  it('never replays one tenant\'s cached answer to another tenant for the same request', async () => {
+    let call = 0;
+    vi.mocked(fakeClient.nr.stream).mockImplementation(async () => {
+      call += 1;
+      const text = `answer-for-call-${call}`;
+      return { meta: { cost: { costUsd: 0.01, status: 'exact' } }, chunks: (async function* () { yield text; })() } as any;
+    });
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex });
+    const req = { messages: [{ role: 'user' as const, content: 'Q' }] };
+    const text = async (tenantId: string) => {
+      let out = '';
+      for await (const event of agent.chat(req, { tenantId })) if (event.type === 'token') out += event.text;
+      return out;
+    };
+
+    expect(await text('tenant-a')).toBe('answer-for-call-1');
+    expect(await text('tenant-b')).toBe('answer-for-call-2');
+    expect(await text('tenant-a')).toBe('answer-for-call-1');
+    expect(call).toBe(2);
+  });
+
+  it('does not short-circuit an FAQ when the visitor asks for a human, so escalation still runs', async () => {
+    const { latestQuestion } = await import('../src/gaps.js');
+    const { callHook } = await import('../src/hooks.js');
+    vi.mocked(latestQuestion).mockReturnValue('I cannot sign in, connect me to a human');
+    const onEscalation = vi.fn();
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, hooks: { onEscalation }, responseCache: false });
+
+    for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'x' }] })) { /* drain */ }
+
+    expect(fakeClient.nr.stream).toHaveBeenCalled();
+    expect(callHook).toHaveBeenCalledWith(expect.objectContaining({ onEscalation }), 'onEscalation', expect.anything());
+    vi.mocked(latestQuestion).mockReturnValue('Q');
+  });
+
+  it('skips the built-in FAQ answers when curatedAnswers is false', async () => {
+    const { latestQuestion } = await import('../src/gaps.js');
+    vi.mocked(latestQuestion).mockReturnValueOnce('How does the platform fee work?');
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, curatedAnswers: false, responseCache: false });
+
+    for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'x' }] })) { /* drain */ }
+
+    expect(fakeClient.nr.stream).toHaveBeenCalled();
   });
 
   it('loads signed-in account data for each turn and includes it with retrieved knowledge', async () => {
