@@ -77,7 +77,7 @@ export const FAQ_ENTRIES: readonly FaqEntry[] = [
   {
     question: 'Which models are available right now?',
     match: /\b(?:which|what)\s+models?\s+(?:are|is)\s+(?:available|live|offered)\b|\b(?:available|live|current)\s+models?\b|\blist\s+of\s+models\b/,
-    answer: 'The live catalog is the source of truth for the models available to your organization. Browse it on the **Models** page in the [dashboard](https://app.nrouter.ai) or query the [live Models API](https://nrouter.ai/api/public/models). Browsing the catalog is free; model requests are billed.',
+    answer: 'The live catalog is the source of truth for the models available to your organization. Browse it on the **Models** page in the [dashboard](https://app.nrouter.ai); the [Model Catalog guide](https://nrouter.ai/docs/guides/models) explains what each entry shows. Browsing the catalog is free; model requests are billed.',
     source: MODELS,
   },
   {
