@@ -72,10 +72,21 @@ export async function POST(req: Request) {
 | `memoryStore` | Optional `(sessionId) => MemoryStore` from `@nrouter_ai/sdk` |
 | `maskPii` | Mask emails and phone numbers before egress (default `true`) |
 | `responseCache` | In-memory cache `{ ttlMs, maxEntries }` (default 5m, 100 entries; pass `false` to disable) |
+| `curatedAnswers` | Answer common nRouter questions from built-in reviewed answers before retrieval (default `true`; see [FAQ answers](#faq-answers-before-retrieval)) |
 | `tools`, `maxToolSteps` | Optional host tools (`AgentTool` from `@nrouter_ai/sdk`, default 4 steps/turn) |
 | `agentName`, `instructions` | Agent name (default `Support`) and appended house rules |
 | `topK`, `maxTokens`, `confidence` | Retrieval depth (5), max output tokens (1024), similarity thresholds (0.55/0.40) |
 | `limits`, `hooks`, `baseURL` | Request ceilings, lifecycle callbacks, or gateway base URL override |
+
+### FAQ answers before retrieval
+
+The agent checks a small bank of reviewed answers to common nRouter questions (fees, keys, credits,
+logs, guardrails, caching) before it retrieves documents or calls a model. A recognised question gets
+its documented answer and citation directly: no embedding, retrieval or generation call, and no
+`cost` event. Everything else continues through the configured knowledge strategy. The bank is
+shared, public text — it never holds account- or tenant-specific facts — and a request for a human
+or a meeting always skips it so escalation and booking still run. `onTurnMetrics` reports these turns
+with `faqHit: true`. Set `curatedAnswers: false` when the agent supports a product other than nRouter.
 
 ### `build-kb` options
 ```bash
@@ -84,7 +95,7 @@ support-agent build-kb --docs <dir> [--seed-url <u>]... --out <file> [--model m]
 
 ## PostgreSQL Knowledge Store
 
-For shared production indices, apply [`migrations/001_support_agent_pgvector.sql`](migrations/001_support_agent_pgvector.sql) (pgvector HNSW cosine search, 768-d). Run `examples/quickstart/sync-postgres.mjs` to rebuild and sync.
+For shared production indices, apply [`migrations/001_support_agent_pgvector.sql`](migrations/001_support_agent_pgvector.sql) (pgvector HNSW cosine search, 768-d). Run `examples/quickstart/sync-postgres.mjs` to rebuild and sync (set `DOCS_SKIP_BLOCKED=true` to leave out and log documents the gateway's embedding guardrails refuse; a build with zero chunks never replaces the active index).
 
 ```typescript
 import pg from 'pg';
@@ -151,7 +162,7 @@ Pass `model: ['primary', 'backup']`. Moves to backup only on HTTP 404, 503, or 4
 |---|---|
 | `onGap` | Question docs could not answer confidently |
 | `onCost` | What the turn cost, with `actualModel` and `routingChain` |
-| `onTurnMetrics` | Per-turn `{ strategy, cacheHit, knowledgeMs, answerMs, totalMs, contextChars }` |
+| `onTurnMetrics` | Per-turn `{ strategy, cacheHit, faqHit?, knowledgeMs, answerMs, totalMs, contextChars }` |
 | `onFeedback` | Rating passed to `agent.feedback()` |
 | `onToolCall` | Step progress for host tools (`running`, `done`, `error`) |
 | `onEscalation` | Escalation needed (`human_requested`, `low_confidence`, `unresolved`) |

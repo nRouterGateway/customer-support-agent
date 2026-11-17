@@ -189,6 +189,11 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
   }
   const maskPii = config.maskPii !== false;
 
+  if (config.curatedAnswers !== undefined && typeof config.curatedAnswers !== 'boolean') {
+    throw new SupportAgentError('invalid_config', 'curatedAnswers must be a boolean');
+  }
+  const curatedAnswers = config.curatedAnswers !== false;
+
   const webSearch = config.webSearch === false || config.webSearch === undefined ? null : config.webSearch;
   if (webSearch && webSearch.timeoutMs !== undefined) {
     const t = webSearch.timeoutMs;
@@ -223,5 +228,6 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
     responseCache: config.responseCache === false ? null : createResponseCache(config.responseCache),
     hooks: config.hooks ?? {},
     maskPii,
+    curatedAnswers,
   };
 }

@@ -159,6 +159,12 @@ describe('resolveConfig', () => {
     expect(() => resolveConfig({ ...validBaseConfig, maskPii: 'yes' as any })).toThrowError(SupportAgentError);
   });
 
+  it('resolves curatedAnswers default true, respects false, and rejects non-booleans', () => {
+    expect(resolveConfig(validBaseConfig).curatedAnswers).toBe(true);
+    expect(resolveConfig({ ...validBaseConfig, curatedAnswers: false }).curatedAnswers).toBe(false);
+    expect(() => resolveConfig({ ...validBaseConfig, curatedAnswers: 'no' as any })).toThrowError(SupportAgentError);
+  });
+
   describe('model list', () => {
     it('resolves a single model id to a one-entry list', () => {
       expect(resolveConfig(validBaseConfig).models).toEqual(['claude-haiku']);

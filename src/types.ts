@@ -22,7 +22,10 @@ export type KnowledgeStrategy = 'rag' | 'cag';
 
 export interface TurnMetrics {
   strategy: KnowledgeStrategy;
+  /** True when the turn was replayed from the response cache. */
   cacheHit: boolean;
+  /** True when a built-in reviewed FAQ answer served the turn (no retrieval or model call). */
+  faqHit?: boolean;
   knowledgeMs: number;
   answerMs: number;
   totalMs: number;
@@ -324,6 +327,12 @@ export interface SupportAgentConfig {
    * never need the literal value.
    */
   maskPii?: boolean;
+  /**
+   * Answer a small set of common nRouter questions from built-in, reviewed
+   * answers before retrieval (default true). Set false when the agent supports
+   * a product other than nRouter, so every turn uses your own knowledge.
+   */
+  curatedAnswers?: boolean;
 }
 
 /** Config after defaults are applied and validation passed. */
@@ -351,6 +360,7 @@ export interface ResolvedConfig {
   responseCache: { get(key: string): AgentEvent[] | undefined; set(key: string, events: AgentEvent[]): void } | null;
   hooks: SupportAgentHooks;
   maskPii: boolean;
+  curatedAnswers: boolean;
 }
 
 export interface ChatTurn {
